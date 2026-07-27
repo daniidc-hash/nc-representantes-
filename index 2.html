@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NC · Painel do Representante</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root {
+    --navy: #14213D;
+    --navy-dark: #0D162A;
+    --beige: #EFE6D6;
+    --beige-2: #E7DAC2;
+    --yellow: #F4B740;
+    --yellow-dark: #D89A1F;
+    --text: #1F2530;
+    --muted: #8A8578;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Arial, sans-serif; background: var(--beige); color: var(--text); }
+
+  .login-wrap { min-height: 100vh; background: var(--navy); display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .login-box { background: var(--beige); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.3); width: 100%; max-width: 380px; padding: 28px; }
+  .login-title { text-align: center; color: var(--navy); font-size: 22px; font-weight: 700; margin: 0 0 2px; }
+  .login-sub { text-align: center; color: var(--muted); font-size: 12px; margin: 0 0 20px; }
+  .switcher { display: flex; background: var(--beige-2); border-radius: 8px; padding: 4px; margin-bottom: 18px; flex-wrap: wrap; }
+  .switcher button { flex: 1; border: none; background: transparent; padding: 8px; font-size: 12px; border-radius: 6px; cursor: pointer; color: var(--muted); white-space: nowrap; }
+  .switcher button.active { background: #fff; color: var(--navy); font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+  .erro { color: #b3261e; font-size: 12px; margin: -4px 0 10px; }
+
+  label.campo { display: block; margin-bottom: 12px; }
+  label.campo span { display: block; font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .02em; }
+  .input, select.input, input.input, textarea.input { width: 100%; border: 1px solid #d9cfb8; border-radius: 6px; padding: 9px 10px; font-size: 14px; background: #fff; color: var(--text); font-family: inherit; }
+  .input:focus { outline: none; border-color: var(--navy); box-shadow: 0 0 0 2px rgba(20,33,61,.15); }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+  .btn { display: inline-block; border: none; border-radius: 6px; padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .btn-primary { background: var(--navy); color: #fff; }
+  .btn-primary:hover { background: var(--navy-dark); }
+  .btn-yellow { background: var(--yellow); color: var(--navy); }
+  .btn-yellow:hover { background: var(--yellow-dark); }
+  .btn-secondary { background: var(--beige-2); color: var(--text); border: 1px solid #d9cfb8; }
+  .btn-secondary:hover { background: #ddd0b3; }
+  .btn-ghost { background: transparent; color: var(--navy); }
+  .btn-ghost:hover { background: #eef0f5; }
+  .btn-danger { background: #fbeceb; color: #b3261e; border: 1px solid #f3d3d1; }
+  .btn-danger:hover { background: #f6d9d7; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-block { width: 100%; }
+  .btn-sm { padding: 6px 10px; font-size: 12px; }
+
+  .header { background: var(--navy); color: #fff; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+  .header.gestor { background: var(--navy-dark); }
+  .header h1 { font-size: 17px; margin: 0; letter-spacing: .02em; }
+  .header p { font-size: 11px; margin: 2px 0 0; opacity: .8; }
+  .tabs { background: #fff; border-bottom: 1px solid #eadfc7; padding: 0 24px; display: flex; gap: 2px; overflow-x: auto; }
+  .tab { padding: 12px 14px; font-size: 13px; font-weight: 700; color: var(--muted); border: none; background: transparent; border-bottom: 3px solid transparent; cursor: pointer; margin-bottom: -1px; white-space: nowrap; }
+  .tab.active { color: var(--navy); border-bottom-color: var(--yellow); }
+  main { padding: 24px; max-width: 1080px; margin: 0 auto; }
+
+  .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+  .section-head h2 { font-size: 18px; margin: 0; color: var(--text); }
+
+  .card { background: #fff; border: 1px solid #eadfc7; border-radius: 8px; }
+  .empty { padding: 36px; text-align: center; color: var(--muted); font-size: 13px; }
+  .list-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #f2ecdc; gap: 10px; flex-wrap: wrap; }
+  .list-item:last-child { border-bottom: none; }
+  .list-item .titulo { font-weight: 700; font-size: 14px; margin: 0; }
+  .list-item .sub { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
+  .actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+  .badge { padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .badge-gray { background: #eee6d6; color: #6b625a; }
+  .badge-amber { background: #fdecc5; color: #91650a; }
+  .badge-green { background: #dcefe0; color: #2f7a3a; }
+  .badge-red { background: #fbeceb; color: #b3261e; }
+  .badge-blue { background: #dde6f5; color: #1e3a6e; }
+
+  select.status-select { font-size: 12px; padding: 5px 6px; border-radius: 6px; border: 1px solid #d9cfb8; }
+
+  .overlay { position: fixed; inset: 0; background: rgba(15,20,30,.55); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 50; }
+  .modal { background: #fff; border-radius: 10px; box-shadow: 0 20px 40px rgba(0,0,0,.3); width: 100%; max-width: 420px; max-height: 90vh; overflow-y: auto; }
+  .modal.wide { max-width: 760px; }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #eee6d6; }
+  .modal-head h3 { margin: 0; font-size: 15px; }
+  .modal-head button { border: none; background: none; font-size: 22px; color: var(--muted); cursor: pointer; line-height: 1; }
+  .modal-body { padding: 20px; }
+
+  table.itens { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 10px; }
+  table.itens th { text-align: left; font-size: 11px; color: var(--muted); border-bottom: 1px solid #eee6d6; padding: 4px 4px; }
+  table.itens td { padding: 7px 4px; border-bottom: 1px solid #f2ebdd; }
+  .rem-link { color: #b3261e; font-size: 11px; background: none; border: none; cursor: pointer; }
+  .add-box { background: #FBF6EA; border: 1px solid #eee6d6; border-radius: 8px; padding: 12px; margin-bottom: 16px; }
+  .add-box p { font-size: 12px; color: #7a716a; margin: 0 0 8px; font-weight: 700; }
+  .add-row { display: flex; gap: 8px; }
+  .add-row .qtd { width: 80px; flex: none; }
+  .total-line { text-align: right; font-size: 13px; margin: 3px 0; }
+  .total-line b { font-size: 16px; }
+  .modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+
+  .print-toolbar { padding: 14px 20px; border-bottom: 1px solid #eadfc7; display: flex; justify-content: space-between; align-items: center; }
+  .print-doc { max-width: 640px; margin: 0 auto; padding: 40px; }
+  .print-head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid var(--navy); padding-bottom: 14px; margin-bottom: 22px; }
+  .print-head h1 { color: var(--navy); font-size: 26px; margin: 0; }
+  .print-head .sub { font-size: 11px; color: var(--muted); margin: 2px 0 0; }
+  .print-head .doc-num { font-weight: 700; margin: 0; font-size: 14px; }
+  .print-head .doc-date { color: var(--muted); margin: 2px 0 0; font-size: 13px; }
+  .print-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px; font-size: 13px; }
+  .print-grid .lbl { font-size: 10px; text-transform: uppercase; color: var(--muted); margin: 0 0 2px; letter-spacing: .03em; }
+  .print-grid .val { font-weight: 700; margin: 0; }
+  table.print-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 14px; }
+  table.print-table th { text-align: left; border-bottom: 2px solid #d9cfb8; padding: 8px 4px; color: #6b625a; }
+  table.print-table td { border-bottom: 1px solid #eee6d6; padding: 8px 4px; }
+  .print-summary { margin-left: auto; width: 260px; font-size: 13px; }
+  .print-summary div { display: flex; justify-content: space-between; padding: 3px 0; }
+  .print-summary .final { border-top: 2px solid var(--navy); margin-top: 6px; padding-top: 8px; font-size: 20px; font-weight: 800; color: var(--navy); }
+  .print-foot { font-size: 11px; color: #c2b8a3; margin-top: 36px; padding-top: 14px; border-top: 1px solid #eee6d6; }
+
+  .banner-config { background: #fdecc5; color: #7a5300; font-size: 12px; text-align: center; padding: 8px; }
+  .banner-alert { background: #fbeceb; color: #8a2018; font-size: 13px; padding: 10px 24px; }
+  .loading-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 13px; }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  .kpi-card { background: #fff; border: 1px solid #eadfc7; border-radius: 10px; padding: 16px; }
+  .kpi-card .lbl { font-size: 11px; text-transform: uppercase; color: var(--muted); font-weight: 700; letter-spacing: .02em; margin: 0 0 6px; }
+  .kpi-card .val { font-size: 24px; font-weight: 800; color: var(--navy); margin: 0; }
+
+  .map-grid { display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(4, 70px); gap: 8px; margin-bottom: 24px; max-width: 520px; }
+  .map-cell { border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; padding: 6px; text-align: center; }
+  .map-cell .nome { font-size: 11px; font-weight: 700; text-transform: uppercase; opacity: .85; }
+  .map-cell .num { font-size: 18px; font-weight: 800; }
+  .map-cell .val { font-size: 11px; opacity: .9; }
+
+  .filtro-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; background: #fff; border: 1px solid #eadfc7; border-radius: 8px; padding: 10px; }
+  .filtro-bar select, .filtro-bar input { font-size: 12px; padding: 6px 8px; border: 1px solid #d9cfb8; border-radius: 6px; }
+
+  .reminder-item { border-left: 3px solid var(--yellow); padding-left: 10px; }
+
+  @media print { .no-print { display: none !important; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+/* ============================================================
+   CONFIGURAÇÃO — preencha com os dados do seu projeto Supabase
+============================================================ */
+const SUPABASE_URL = "https://wnnpmbgytuxyzonkmlyp.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_wlkj9arKt8rtySgbwEtIxw_ETQCi-Ta";
+
+/* ============================================================
+   CONFIGURAÇÃO — e-mail automático via EmailJS (emailjs.com)
+============================================================ */
+const EMAILJS_SERVICE_ID = "SEU_SERVICE_ID";
+const EMAILJS_TEMPLATE_ID = "SEU_TEMPLATE_ID";
+const EMAILJS_PUBLIC_KEY = "SUA_PUBLIC_KEY";
+const EMAIL_GESTOR = "seuemail@exemplo.com";
+const EMAIL_CONFIGURADO = EMAILJS_SERVICE_ID !== "SEU_SERVICE_ID" && EMAILJS_TEMPLATE_ID !== "SEU_TEMPLATE_ID" && EMAILJS_PUBLIC_KEY !== "SUA_PUBLIC_KEY";
+
+/* Login do gestor agora é individual (usuário/senha), veja tabela "gestores" no Supabase */
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const TIPOS_CLIENTE = ["Distribuidor", "Aplicador", "Revenda Lojista", "Construtora/Cliente Final"];
+const FORMAS_PAGAMENTO = ["Pix", "Boleto 7 dias", "Boleto 21/42 dias", "Boleto 28 dias", "Cartão 1x", "Cartão 2x", "Cartão 3x", "Outro"];
+const UF_LIST = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
+const REGIAO_POR_UF = { AC:"Norte",AP:"Norte",AM:"Norte",PA:"Norte",RO:"Norte",RR:"Norte",TO:"Norte",
+  AL:"Nordeste",BA:"Nordeste",CE:"Nordeste",MA:"Nordeste",PB:"Nordeste",PE:"Nordeste",PI:"Nordeste",RN:"Nordeste",SE:"Nordeste",
+  DF:"Centro-Oeste",GO:"Centro-Oeste",MT:"Centro-Oeste",MS:"Centro-Oeste",
+  ES:"Sudeste",MG:"Sudeste",RJ:"Sudeste",SP:"Sudeste",
+  PR:"Sul",RS:"Sul",SC:"Sul" };
+const REGIOES = ["Norte","Nordeste","Centro-Oeste","Sudeste","Sul"];
+const REGIAO_COR = { "Norte":"#2F7A3A","Nordeste":"#D89A1F","Centro-Oeste":"#8A5A2B","Sudeste":"#14213D","Sul":"#1E3A6E" };
+
+function fmt(v) { return (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
+function hoje() { return new Date().toLocaleDateString("pt-BR"); }
+function hojeISO() { return new Date().toISOString().slice(0,10); }
+async function hashSenha(str) {
+  try {
+    if (window.crypto && window.crypto.subtle && window.isSecureContext) {
+      const enc = new TextEncoder().encode("nc_salt_" + str);
+      const buf = await window.crypto.subtle.digest("SHA-256", enc);
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+    }
+  } catch (e) { console.warn("Hash seguro indisponível, usando fallback (só para teste local)", e); }
+  // Fallback simples — NÃO é criptografia de verdade. Só é usado quando o arquivo
+  // é aberto direto (file://) em vez de servido via https (ex: já publicado na Vercel).
+  var h = 0; for (var i = 0; i < str.length; i++) { h = (h * 31 + str.charCodeAt(i)) | 0; }
+  return "fb_" + Math.abs(h).toString(16);
+}
+
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+
+async function notificarGestor(tipoDocumento, doc) {
+  if (!EMAIL_CONFIGURADO) return;
+  const itensTexto = doc.itens.map(i => `${i.qtd}x ${i.nome} (${fmt(i.total)})`).join("\n");
+  try {
+    await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ service_id: EMAILJS_SERVICE_ID, template_id: EMAILJS_TEMPLATE_ID, user_id: EMAILJS_PUBLIC_KEY,
+        template_params: { to_email: EMAIL_GESTOR, tipo_documento: tipoDocumento, representante: doc.repNome, cliente: doc.clienteNome, total: fmt(doc.total), data: doc.criadoEm, itens: itensTexto } })
+    });
+  } catch (e) { console.error("Falha ao enviar e-mail", e); }
+}
+function downloadCSV(filename, rows) {
+  const csv = rows.map(r => r.map(c => `"${String(c ?? "").replace(/"/g, '""')}"`).join(";")).join("\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ---------------- Estado ---------------- */
+var state = {
+  booting: true,
+  configOk: SUPABASE_URL !== "COLE_AQUI_A_PROJECT_URL" && SUPABASE_ANON_KEY !== "COLE_AQUI_A_ANON_KEY",
+  products: [], carriers: [],
+  session: null, isAdmin: false, gestorSession: null,
+  tab: "clientes", modal: null, printDoc: null, draftQuote: null, pedidoDraft: null,
+  loginMode: "login", loginErro: "",
+  myClients: [], myQuotes: [], myOrders: [], myVisits: [],
+  admin: { reps: [], clients: [], quotes: [], orders: [], carriers: [], aba: "dashboard", dashboardRepId: "",
+    filtroProduto: "", filtroValorMin: "", filtroValorMax: "" }
+};
+
+function render() {
+  var app = document.getElementById("app");
+  if (!state.configOk) { app.innerHTML = '<div class="loading-wrap">Configuração pendente: preencha SUPABASE_URL e SUPABASE_ANON_KEY no topo do arquivo.</div>'; return; }
+  if (state.booting) { app.innerHTML = '<div class="loading-wrap">Carregando...</div>'; return; }
+  if (state.printDoc) { app.innerHTML = renderPrint(state.printDoc); return; }
+  if (state.isAdmin) { app.innerHTML = renderPainelGestor(); return; }
+  if (!state.session) { app.innerHTML = renderLogin(); return; }
+  app.innerHTML = renderShell();
+}
+
+async function boot() {
+  if (!state.configOk) { render(); return; }
+  const [{ data: products }, { data: carriers }] = await Promise.all([
+    sb.from("products").select("*").order("id"),
+    sb.from("carriers").select("*").order("nome"),
+  ]);
+  state.products = (products || []).map(p => ({ id: p.id, nome: p.nome, precos: p.precos }));
+  state.carriers = carriers || [];
+  state.booting = false;
+  render();
+}
+
+/* ---------------- Login ---------------- */
+function renderLogin() {
+  var isLogin = state.loginMode === "login";
+  var isGestor = state.loginMode === "gestor";
+  return '' +
+    '<div class="login-wrap"><div class="login-box">' +
+      '<h1 class="login-title">NC</h1><p class="login-sub">Painel do Representante Comercial</p>' +
+      '<div class="switcher">' +
+        '<button class="' + (isLogin?"active":"") + '" onclick="setLoginMode(\'login\')">Entrar</button>' +
+        '<button class="' + (state.loginMode==="cadastro"?"active":"") + '" onclick="setLoginMode(\'cadastro\')">Cadastrar</button>' +
+        '<button class="' + (isGestor?"active":"") + '" onclick="setLoginMode(\'gestor\')">Gestor</button>' +
+      '</div>' +
+      (isGestor
+        ? '<label class="campo"><span>Usuário</span><input class="input" id="gestorUsuario"></label>' +
+          '<label class="campo"><span>Senha</span><input type="password" class="input" id="gestorSenha"></label>' +
+          (state.loginErro ? '<p class="erro">'+esc(state.loginErro)+'</p>' : '') +
+          '<button class="btn btn-primary btn-block" onclick="entrarGestor()">Entrar no painel</button>'
+        : (
+          (state.loginMode==="cadastro" ? '<label class="campo"><span>Nome completo</span><input class="input" id="loginNome"></label>' : '') +
+          '<label class="campo"><span>Usuário</span><input class="input" id="loginUsuario"></label>' +
+          '<label class="campo"><span>Senha</span><input type="password" class="input" id="loginSenha"></label>' +
+          (state.loginErro ? '<p class="erro">'+esc(state.loginErro)+'</p>' : '') +
+          '<button class="btn btn-primary btn-block" onclick="' + (isLogin?"doLogin()":"doRegister()") + '">' + (isLogin?"Entrar":"Criar cadastro") + '</button>'
+        )
+      ) +
+    '</div></div>';
+}
+function setLoginMode(m) { state.loginMode = m; state.loginErro = ""; render(); }
+
+async function doLogin() {
+  var usuario = document.getElementById("loginUsuario").value.trim();
+  var senha = document.getElementById("loginSenha").value;
+  var senhaHash = await hashSenha(senha);
+  const { data, error } = await sb.from("reps").select("*").ilike("usuario", usuario).eq("senha", senhaHash).maybeSingle();
+  if (error || !data) { state.loginErro = "Usuário ou senha inválidos."; render(); return; }
+  state.session = { id: data.id, nome: data.nome, usuario: data.usuario };
+  await entrarComoRep();
+}
+async function doRegister() {
+  var nome = document.getElementById("loginNome").value.trim();
+  var usuario = document.getElementById("loginUsuario").value.trim();
+  var senha = document.getElementById("loginSenha").value;
+  if (!nome || !usuario || !senha) { state.loginErro = "Preencha todos os campos."; render(); return; }
+  const { data: existente } = await sb.from("reps").select("id").ilike("usuario", usuario).maybeSingle();
+  if (existente) { state.loginErro = "Esse usuário já existe."; render(); return; }
+  var senhaHash = await hashSenha(senha);
+  const { data, error } = await sb.from("reps").insert({ nome, usuario, senha: senhaHash }).select().single();
+  if (error) { state.loginErro = "Erro ao cadastrar: " + error.message; render(); return; }
+  state.session = { id: data.id, nome: data.nome, usuario: data.usuario };
+  await entrarComoRep();
+}
+async function entrarComoRep() {
+  state.tab = "clientes"; state.booting = true; render();
+  await carregarDadosDoRep();
+  state.booting = false; render();
+}
+async function carregarDadosDoRep() {
+  const rid = state.session.id;
+  const [{ data: clients }, { data: quotes }, { data: orders }, { data: visits }] = await Promise.all([
+    sb.from("clients").select("*").eq("rep_id", rid).order("criado_em"),
+    sb.from("quotes").select("*").eq("rep_id", rid).order("criado_em"),
+    sb.from("orders").select("*").eq("rep_id", rid).order("criado_em"),
+    sb.from("visits").select("*").eq("rep_id", rid).order("data_followup"),
+  ]);
+  state.myClients = clients || [];
+  state.myQuotes = (quotes || []).map(mapQuoteFromDb);
+  state.myOrders = (orders || []).map(mapQuoteFromDb);
+  state.myVisits = visits || [];
+}
+function mapQuoteFromDb(q) {
+  return { id: q.id, repId: q.rep_id, repNome: q.rep_nome, clientId: q.client_id, clienteNome: q.cliente_nome, clienteTipo: q.cliente_tipo,
+    itens: q.itens, subtotal: Number(q.subtotal != null ? q.subtotal : q.total), desconto: Number(q.desconto || 0), total: Number(q.total),
+    formaPagamento: q.forma_pagamento, carrierNome: q.carrier_nome, observacoes: q.observacoes, status: q.status,
+    criadoEm: q.criado_em ? new Date(q.criado_em).toLocaleDateString("pt-BR") : hoje() };
+}
+function doLogout() { state.session = null; render(); }
+
+async function entrarGestor() {
+  var usuario = document.getElementById("gestorUsuario").value.trim();
+  var senha = document.getElementById("gestorSenha").value;
+  var senhaHash = await hashSenha(senha);
+  const { data, error } = await sb.from("gestores").select("*").ilike("usuario", usuario).eq("senha", senhaHash).maybeSingle();
+  if (error || !data) { state.loginErro = "Usuário ou senha de gestor inválidos."; render(); return; }
+  state.gestorSession = { id: data.id, nome: data.nome, usuario: data.usuario };
+  state.isAdmin = true;
+  state.booting = true; render();
+  await carregarDadosGestor();
+  state.booting = false; render();
+}
+async function carregarDadosGestor() {
+  const [{ data: reps }, { data: clients }, { data: quotes }, { data: orders }, { data: carriers }] = await Promise.all([
+    sb.from("reps").select("*").order("criado_em"),
+    sb.from("clients").select("*").order("criado_em"),
+    sb.from("quotes").select("*").order("criado_em"),
+    sb.from("orders").select("*").order("criado_em"),
+    sb.from("carriers").select("*").order("nome"),
+  ]);
+  state.admin.reps = reps || [];
+  state.admin.clients = clients || [];
+  state.admin.quotes = (quotes || []).map(mapQuoteFromDb);
+  state.admin.orders = (orders || []).map(mapQuoteFromDb);
+  state.admin.carriers = carriers || [];
+}
+function sairGestor() { state.isAdmin = false; state.gestorSession = null; render(); }
+
+/* ---------------- Shell (representante) ---------------- */
+function renderShell() {
+  var tabsHtml = [["clientes","Clientes"],["orcamentos","Orçamentos"],["pedidos","Pedidos"],["agenda","Agenda"]].map(t =>
+    '<button class="tab ' + (state.tab===t[0]?"active":"") + '" onclick="setTab(\''+t[0]+'\')">'+t[1]+'</button>'
+  ).join("");
+  var body = state.tab === "clientes" ? renderClientes() : state.tab === "orcamentos" ? renderOrcamentos() : state.tab === "pedidos" ? renderPedidos() : renderAgenda();
+  var pendentes = state.myVisits.filter(v => v.data_followup && v.data_followup <= hojeISO());
+  var banner = pendentes.length > 0 ? '<div class="banner-alert no-print">Você tem ' + pendentes.length + ' follow-up(s) vencendo hoje ou atrasado(s). Veja a aba Agenda.</div>' : '';
+  return '' +
+    '<div class="header no-print"><div><h1>NC · Painel do Representante</h1><p>' + esc(state.session.nome) + '</p></div><button class="btn btn-secondary" onclick="doLogout()">Sair</button></div>' +
+    banner +
+    '<div class="tabs no-print">' + tabsHtml + '</div>' +
+    '<main>' + body + '</main>' +
+    (!EMAIL_CONFIGURADO ? '<p class="banner-config no-print">Notificação por e-mail ainda não configurada (EmailJS pendente).</p>' : '') +
+    (state.modal ? renderModal() : '');
+}
+function setTab(t) { state.tab = t; state.modal = null; render(); }
+
+/* ---------------- Clientes ---------------- */
+function renderClientes() {
+  var list = state.myClients;
+  var itemsHtml = list.length === 0 ? '<div class="empty">Nenhum cliente cadastrado ainda.</div>' : list.map(c =>
+    '<div class="list-item"><div><p class="titulo">'+esc(c.nome)+'</p><p class="sub">'+esc(c.tipo)+' · '+esc(c.cidade||"sem cidade")+(c.estado?"/"+esc(c.estado):"")+' · '+esc(c.telefone||"sem telefone")+'</p></div>' +
+    '<div class="actions"><button class="btn btn-ghost btn-sm" onclick="openClientModal(\''+c.id+'\')">Editar</button>' +
+    '<button class="btn btn-danger btn-sm" onclick="excluirCliente(\''+c.id+'\')">Excluir</button></div></div>'
+  ).join("");
+  return '<div class="section-head"><h2>Clientes</h2><button class="btn btn-primary" onclick="openClientModal(null)">+ Novo cliente</button></div><div class="card">'+itemsHtml+'</div>';
+}
+function openClientModal(id) {
+  var c = id ? state.myClients.find(x => x.id === id) : { id: null, nome:"", tipo: TIPOS_CLIENTE[0], telefone:"", email:"", documento:"", endereco:"", cep:"", cidade:"", estado:"" };
+  state.modal = { type: "cliente", data: c };
+  render();
+}
+async function excluirCliente(id) {
+  var c = state.myClients.find(x => x.id === id);
+  if (!c || !confirm("Excluir " + c.nome + "?")) return;
+  await sb.from("clients").delete().eq("id", id);
+  state.myClients = state.myClients.filter(x => x.id !== id);
+  render();
+}
+async function salvarCliente() {
+  var d = state.modal.data;
+  var nome = document.getElementById("cliNome").value.trim();
+  if (!nome) return;
+  var payload = {
+    nome, tipo: document.getElementById("cliTipo").value,
+    telefone: document.getElementById("cliTelefone").value.trim(),
+    email: document.getElementById("cliEmail").value.trim(),
+    documento: document.getElementById("cliDocumento").value.trim(),
+    endereco: document.getElementById("cliEndereco").value.trim(),
+    cep: document.getElementById("cliCep").value.trim(),
+    cidade: document.getElementById("cliCidade").value.trim(),
+    estado: document.getElementById("cliEstado").value,
+  };
+  if (d.id) {
+    await sb.from("clients").update(payload).eq("id", d.id);
+    state.myClients = state.myClients.map(x => x.id === d.id ? { ...x, ...payload } : x);
+  } else {
+    payload.rep_id = state.session.id;
+    const { data } = await sb.from("clients").insert(payload).select().single();
+    state.myClients.push(data);
+  }
+  state.modal = null; render();
+}
+
+/* ---------------- Orçamentos ---------------- */
+function renderOrcamentos() {
+  var clientes = state.myClients;
+  var list = state.myQuotes.slice().reverse();
+  var itemsHtml = list.length === 0 ? '<div class="empty">Nenhum orçamento criado ainda.</div>' : list.map(q =>
+    '<div class="list-item"><div><p class="titulo">'+esc(q.clienteNome)+' <span style="color:#a89e93">· '+esc(q.criadoEm)+'</span></p>' +
+    '<p class="sub">'+q.itens.length+' item(ns) · '+fmt(q.total)+(q.desconto?' (desconto '+q.desconto+'%)':'')+' · '+esc(q.formaPagamento||"sem forma de pagto")+'</p></div>' +
+    '<div class="actions">' + badge(q.status) +
+    '<select class="status-select" onchange="atualizarStatusOrcamento(\''+q.id+'\', this.value)">' +
+      ["Rascunho","Enviado","Aprovado","Reprovado"].map(s=>'<option value="'+s+'" '+(s===q.status?"selected":"")+'>'+s+'</option>').join("") +
+    '</select>' +
+    '<button class="btn btn-ghost btn-sm" onclick="imprimirDoc(\'Orçamento\', \''+q.id+'\', \'myQuotes\')">Imprimir / PDF</button>' +
+    (q.status==="Aprovado" ? '<button class="btn btn-yellow btn-sm" onclick="abrirGerarPedido(\''+q.id+'\')">Selecionar → Gerar pedido</button>' : '') +
+    '</div></div>'
+  ).join("");
+  return '<div class="section-head"><h2>Orçamentos</h2><button class="btn btn-primary" '+(clientes.length===0?"disabled":"")+' onclick="abrirNovoOrcamento()">+ Novo orçamento</button></div>' +
+    (clientes.length===0 ? '<p style="font-size:12px;color:#a89e93;margin-top:-8px">Cadastre um cliente antes de criar um orçamento.</p>' : '') +
+    '<div class="card">'+itemsHtml+'</div>';
+}
+function badge(status) {
+  var map = {"Rascunho":"badge-gray","Enviado":"badge-amber","Aprovado":"badge-green","Reprovado":"badge-red","Em aberto":"badge-amber","Faturado":"badge-blue","Entregue":"badge-green","Cancelado":"badge-red"};
+  return '<span class="badge '+(map[status]||"badge-gray")+'">'+esc(status)+'</span>';
+}
+async function atualizarStatusOrcamento(id, status) {
+  await sb.from("quotes").update({ status }).eq("id", id);
+  state.myQuotes = state.myQuotes.map(q => q.id === id ? { ...q, status } : q);
+  render();
+}
+function abrirNovoOrcamento() {
+  if (state.myClients.length === 0) return;
+  state.draftQuote = { clientId: state.myClients[0].id, itens: [], desconto: 0, formaPagamento: FORMAS_PAGAMENTO[0] };
+  state.modal = { type: "orcamento" };
+  render();
+}
+function draftCliente() { return state.myClients.find(c => c.id === state.draftQuote.clientId); }
+function draftMudarCliente(id) { state.draftQuote.clientId = id; render(); }
+function draftAdicionarItem() {
+  var prodId = document.getElementById("orcProduto").value;
+  var qtd = Number(document.getElementById("orcQtd").value) || 0;
+  var cliente = draftCliente();
+  var prod = state.products.find(p => p.id === prodId);
+  if (!prod || !cliente || qtd <= 0) return;
+  var preco = prod.precos[cliente.tipo];
+  state.draftQuote.itens.push({ productId: prod.id, nome: prod.nome, qtd, precoUnit: preco, total: preco * qtd });
+  render();
+}
+function draftRemoverItem(idx) { state.draftQuote.itens.splice(idx, 1); render(); }
+function draftAtualizarDesconto(v) { state.draftQuote.desconto = Number(v) || 0; render(); }
+function draftAtualizarPagamento(v) { state.draftQuote.formaPagamento = v; render(); }
+function draftAtualizarPagamentoCustom(v) { state.draftQuote.formaPagamentoCustom = v; }
+async function salvarOrcamento() {
+  var cliente = draftCliente();
+  var itens = state.draftQuote.itens;
+  if (!cliente || itens.length === 0) return;
+  var subtotal = itens.reduce((s,i)=>s+i.total,0);
+  var desconto = state.draftQuote.desconto || 0;
+  var total = subtotal * (1 - desconto/100);
+  var formaPagamentoFinal = state.draftQuote.formaPagamento === "Outro" ? (state.draftQuote.formaPagamentoCustom || "Outro") : state.draftQuote.formaPagamento;
+  var payload = { rep_id: state.session.id, rep_nome: state.session.nome, client_id: cliente.id, cliente_nome: cliente.nome, cliente_tipo: cliente.tipo,
+    itens, subtotal, desconto, total, forma_pagamento: formaPagamentoFinal, status: "Rascunho" };
+  const { data } = await sb.from("quotes").insert(payload).select().single();
+  var novo = mapQuoteFromDb(data);
+  state.myQuotes.push(novo);
+  state.modal = null; state.draftQuote = null;
+  render();
+  notificarGestor("Orçamento", novo);
+}
+
+/* ---------------- Gerar pedido (seleciona forma de pagto + transportadora) ---------------- */
+function abrirGerarPedido(quoteId) {
+  var q = state.myQuotes.find(x => x.id === quoteId);
+  if (!q) return;
+  state.pedidoDraft = { quoteId, formaPagamento: q.formaPagamento || FORMAS_PAGAMENTO[0], carrierId: state.carriers[0]?.id || "" };
+  state.modal = { type: "pedido" };
+  render();
+}
+function renderModalPedido() {
+  var q = state.myQuotes.find(x => x.id === state.pedidoDraft.quoteId);
+  var pagtoHtml = FORMAS_PAGAMENTO.map(f => '<option value="'+f+'" '+(f===state.pedidoDraft.formaPagamento?"selected":"")+'>'+f+'</option>').join("");
+  var transpHtml = state.carriers.length === 0 ? '<option value="">Nenhuma transportadora cadastrada</option>' :
+    state.carriers.map(c => '<option value="'+c.id+'">'+esc(c.nome)+'</option>').join("");
+  return '<div class="overlay"><div class="modal"><div class="modal-head"><h3>Gerar pedido — '+esc(q.clienteNome)+'</h3><button onclick="closeModal()">&times;</button></div>' +
+    '<div class="modal-body">' +
+      '<p class="total-line">Total do orçamento: <b>'+fmt(q.total)+'</b></p>' +
+      '<label class="campo"><span>Forma de pagamento</span><select class="input" id="pedFormaPagamento" onchange="renderModalPedidoPagamento(this.value)">'+pagtoHtml+'</select></label>' +
+      (state.pedidoDraft.formaPagamento === "Outro" ? '<label class="campo"><span>Descreva a forma de pagamento</span><input class="input" id="pedFormaPagamentoCustom" value="'+esc(state.pedidoDraft.formaPagamentoCustom||"")+'"></label>' : '') +
+      '<label class="campo"><span>Transportadora</span><select class="input" id="pedTransportadora">'+transpHtml+'</select></label>' +
+      '<label class="campo"><span>Observações</span><textarea class="input" id="pedObservacoes" rows="3">'+esc(state.pedidoDraft.observacoes||"")+'</textarea></label>' +
+      '<div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="confirmarGerarPedido()">Confirmar pedido</button></div>' +
+    '</div></div></div>';
+}
+function renderModalPedidoPagamento(v) { state.pedidoDraft.formaPagamento = v; render(); }
+async function confirmarGerarPedido() {
+  var q = state.myQuotes.find(x => x.id === state.pedidoDraft.quoteId);
+  var formaPagamentoSel = document.getElementById("pedFormaPagamento").value;
+  var formaPagamento = formaPagamentoSel === "Outro" ? (document.getElementById("pedFormaPagamentoCustom").value.trim() || "Outro") : formaPagamentoSel;
+  var carrierId = document.getElementById("pedTransportadora").value;
+  var carrier = state.carriers.find(c => c.id === carrierId);
+  var observacoes = document.getElementById("pedObservacoes").value.trim();
+  var payload = { rep_id: q.repId, rep_nome: q.repNome, client_id: q.clientId, cliente_nome: q.clienteNome, cliente_tipo: q.clienteTipo,
+    quote_id: q.id, itens: q.itens, subtotal: q.subtotal, desconto: q.desconto, total: q.total,
+    forma_pagamento: formaPagamento, carrier_id: carrierId || null, carrier_nome: carrier ? carrier.nome : null, observacoes, status: "Em aberto" };
+  const { data } = await sb.from("orders").insert(payload).select().single();
+  var pedido = mapQuoteFromDb(data);
+  pedido.carrierNome = carrier ? carrier.nome : null;
+  state.myOrders.push(pedido);
+  state.modal = null; state.pedidoDraft = null; state.tab = "pedidos";
+  render();
+  notificarGestor("Pedido", pedido);
+}
+
+/* ---------------- Pedidos ---------------- */
+function renderPedidos() {
+  var list = state.myOrders.slice().reverse();
+  var itemsHtml = list.length === 0 ? '<div class="empty">Nenhum pedido gerado ainda. Aprove um orçamento e clique em "Selecionar → Gerar pedido".</div>' : list.map(p =>
+    '<div class="list-item"><div><p class="titulo">'+esc(p.clienteNome)+' <span style="color:#a89e93">· '+esc(p.criadoEm)+'</span></p>' +
+    '<p class="sub">'+p.itens.length+' item(ns) · '+fmt(p.total)+' · '+esc(p.formaPagamento||"—")+(p.carrierNome?' · Transp.: '+esc(p.carrierNome):'')+'</p>' +
+    (p.observacoes ? '<p class="sub">Obs.: '+esc(p.observacoes)+'</p>' : '') + '</div>' +
+    '<div class="actions">' + badge(p.status) +
+    '<select class="status-select" onchange="atualizarStatusPedido(\''+p.id+'\', this.value)">' +
+      ["Em aberto","Faturado","Entregue","Cancelado"].map(s=>'<option value="'+s+'" '+(s===p.status?"selected":"")+'>'+s+'</option>').join("") +
+    '</select>' +
+    '<button class="btn btn-ghost btn-sm" onclick="imprimirDoc(\'Pedido\', \''+p.id+'\', \'myOrders\')">Imprimir / PDF</button>' +
+    '</div></div>'
+  ).join("");
+  return '<div class="section-head"><h2>Pedidos</h2></div><div class="card">'+itemsHtml+'</div>';
+}
+async function atualizarStatusPedido(id, status) {
+  await sb.from("orders").update({ status }).eq("id", id);
+  state.myOrders = state.myOrders.map(o => o.id === id ? { ...o, status } : o);
+  render();
+}
+
+/* ---------------- Agenda de visitas ---------------- */
+function renderAgenda() {
+  var list = state.myVisits.slice().sort((a,b) => (a.data_followup||"").localeCompare(b.data_followup||""));
+  var itemsHtml = list.length === 0 ? '<div class="empty">Nenhuma visita registrada ainda.</div>' : list.map(v => {
+    var atrasado = v.data_followup && v.data_followup < hojeISO();
+    var hojeF = v.data_followup === hojeISO();
+    var tag = atrasado ? '<span class="badge badge-red">Atrasado</span>' : hojeF ? '<span class="badge badge-amber">Hoje</span>' : '<span class="badge badge-gray">Agendado</span>';
+    return '<div class="list-item reminder-item"><div><p class="titulo">'+esc(v.cliente_nome)+'</p>' +
+      '<p class="sub">Visita: '+fmtData(v.data_visita)+' · Próximo follow-up: '+fmtData(v.data_followup)+'</p>' +
+      (v.observacoes ? '<p class="sub">'+esc(v.observacoes)+'</p>' : '') + '</div>' +
+      '<div class="actions">'+tag+'<button class="btn btn-danger btn-sm" onclick="excluirVisita(\''+v.id+'\')">Excluir</button></div></div>';
+  }).join("");
+  return '<div class="section-head"><h2>Agenda de visitas</h2><button class="btn btn-primary" '+(state.myClients.length===0?"disabled":"")+' onclick="abrirNovaVisita()">+ Nova visita</button></div>' +
+    (state.myClients.length===0 ? '<p style="font-size:12px;color:#a89e93;margin-top:-8px">Cadastre um cliente antes de agendar uma visita.</p>' : '') +
+    '<div class="card">'+itemsHtml+'</div>';
+}
+function fmtData(iso) { if (!iso) return "—"; var [y,m,d] = iso.split("-"); return d+"/"+m+"/"+y; }
+function abrirNovaVisita() {
+  state.modal = { type: "visita", data: { clientId: state.myClients[0].id, dataVisita: hojeISO(), dataFollowup: hojeISO(), observacoes: "" } };
+  render();
+}
+async function excluirVisita(id) {
+  if (!confirm("Excluir essa visita da agenda?")) return;
+  await sb.from("visits").delete().eq("id", id);
+  state.myVisits = state.myVisits.filter(v => v.id !== id);
+  render();
+}
+async function salvarVisita() {
+  var clientId = document.getElementById("visCliente").value;
+  var cliente = state.myClients.find(c => c.id === clientId);
+  var payload = { rep_id: state.session.id, client_id: clientId, cliente_nome: cliente ? cliente.nome : "",
+    data_visita: document.getElementById("visDataVisita").value, data_followup: document.getElementById("visDataFollowup").value,
+    observacoes: document.getElementById("visObs").value.trim() };
+  const { data } = await sb.from("visits").insert(payload).select().single();
+  state.myVisits.push(data);
+  state.modal = null; render();
+}
+
+/* ---------------- Modal (dispatcher) ---------------- */
+function renderModal() {
+  if (state.modal.type === "cliente") return renderModalCliente();
+  if (state.modal.type === "orcamento") return renderModalOrcamento();
+  if (state.modal.type === "pedido") return renderModalPedido();
+  if (state.modal.type === "visita") return renderModalVisita();
+  return "";
+}
+function closeModal() { state.modal = null; state.draftQuote = null; state.pedidoDraft = null; render(); }
+
+function renderModalCliente() {
+  var d = state.modal.data;
+  var tiposHtml = TIPOS_CLIENTE.map(t => '<option value="'+t+'" '+(t===d.tipo?"selected":"")+'>'+t+'</option>').join("");
+  var ufHtml = '<option value="">—</option>' + UF_LIST.map(uf => '<option value="'+uf+'" '+(uf===d.estado?"selected":"")+'>'+uf+'</option>').join("");
+  return '<div class="overlay"><div class="modal"><div class="modal-head"><h3>'+(d.id?"Editar cliente":"Novo cliente")+'</h3><button onclick="closeModal()">&times;</button></div>' +
+    '<div class="modal-body">' +
+      '<label class="campo"><span>Nome / Razão social *</span><input class="input" id="cliNome" value="'+esc(d.nome)+'"></label>' +
+      '<label class="campo"><span>Tipo de cliente *</span><select class="input" id="cliTipo">'+tiposHtml+'</select></label>' +
+      '<div class="row2"><label class="campo"><span>Telefone</span><input class="input" id="cliTelefone" value="'+esc(d.telefone)+'"></label>' +
+      '<label class="campo"><span>E-mail</span><input class="input" id="cliEmail" value="'+esc(d.email)+'"></label></div>' +
+      '<label class="campo"><span>CNPJ/CPF</span><input class="input" id="cliDocumento" value="'+esc(d.documento)+'"></label>' +
+      '<label class="campo"><span>Endereço (rua, número)</span><input class="input" id="cliEndereco" value="'+esc(d.endereco)+'"></label>' +
+      '<div class="row3"><label class="campo"><span>CEP</span><input class="input" id="cliCep" value="'+esc(d.cep)+'"></label>' +
+      '<label class="campo"><span>Cidade</span><input class="input" id="cliCidade" value="'+esc(d.cidade)+'"></label>' +
+      '<label class="campo"><span>Estado</span><select class="input" id="cliEstado">'+ufHtml+'</select></label></div>' +
+      '<div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="salvarCliente()">Salvar</button></div>' +
+    '</div></div></div>';
+}
+function renderModalOrcamento() {
+  var cliente = draftCliente();
+  var tipo = cliente ? cliente.tipo : null;
+  var clientesHtml = state.myClients.map(c => '<option value="'+c.id+'" '+(c.id===state.draftQuote.clientId?"selected":"")+'>'+esc(c.nome)+' — '+esc(c.tipo)+'</option>').join("");
+  var produtosHtml = state.products.map(p => '<option value="'+p.id+'">'+esc(p.nome)+(tipo?' — '+fmt(p.precos[tipo]):'')+'</option>').join("");
+  var pagtoHtml = FORMAS_PAGAMENTO.map(f => '<option value="'+f+'" '+(f===state.draftQuote.formaPagamento?"selected":"")+'>'+f+'</option>').join("");
+  var itens = state.draftQuote.itens;
+  var linhas = itens.length===0 ? '<tr><td colspan="5" style="color:#c2b8ab;font-size:12px;padding:10px 4px">Nenhum item adicionado.</td></tr>' :
+    itens.map((i,idx) => '<tr><td>'+esc(i.nome)+'</td><td>'+i.qtd+'</td><td>'+fmt(i.precoUnit)+'</td><td>'+fmt(i.total)+'</td><td><button class="rem-link" onclick="draftRemoverItem('+idx+')">remover</button></td></tr>').join("");
+  var subtotal = itens.reduce((s,i)=>s+i.total,0);
+  var desconto = state.draftQuote.desconto || 0;
+  var total = subtotal * (1 - desconto/100);
+  return '<div class="overlay"><div class="modal wide"><div class="modal-head"><h3>Novo orçamento</h3><button onclick="closeModal()">&times;</button></div>' +
+    '<div class="modal-body">' +
+      '<label class="campo"><span>Cliente *</span><select class="input" onchange="draftMudarCliente(this.value)">'+clientesHtml+'</select></label>' +
+      '<div class="add-box"><p>Adicionar produto (preço aplicado: '+esc(tipo||"-")+')</p><div class="add-row">' +
+        '<select class="input" id="orcProduto">'+produtosHtml+'</select>' +
+        '<input type="number" min="1" class="input qtd" id="orcQtd" value="1">' +
+        '<button class="btn btn-primary" onclick="draftAdicionarItem()">Adicionar</button>' +
+      '</div></div>' +
+      '<table class="itens"><thead><tr><th>Produto</th><th>Qtd</th><th>Preço unit.</th><th>Total</th><th></th></tr></thead><tbody>'+linhas+'</tbody></table>' +
+      '<div class="row2">' +
+        '<label class="campo"><span>Desconto (%)</span><input type="number" min="0" max="100" class="input" value="'+desconto+'" oninput="draftAtualizarDesconto(this.value)"></label>' +
+        '<label class="campo"><span>Forma de pagamento</span><select class="input" onchange="draftAtualizarPagamento(this.value)">'+pagtoHtml+'</select></label>' +
+      '</div>' +
+      (state.draftQuote.formaPagamento === "Outro" ? '<label class="campo"><span>Descreva a forma de pagamento</span><input class="input" oninput="draftAtualizarPagamentoCustom(this.value)" value="'+esc(state.draftQuote.formaPagamentoCustom||"")+'"></label>' : '') +
+      '<p class="total-line">Subtotal: '+fmt(subtotal)+'</p>' +
+      '<p class="total-line">Total com desconto: <b>'+fmt(total)+'</b></p>' +
+      '<div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="salvarOrcamento()">Salvar orçamento</button></div>' +
+    '</div></div></div>';
+}
+function renderModalVisita() {
+  var d = state.modal.data;
+  var clientesHtml = state.myClients.map(c => '<option value="'+c.id+'" '+(c.id===d.clientId?"selected":"")+'>'+esc(c.nome)+'</option>').join("");
+  return '<div class="overlay"><div class="modal"><div class="modal-head"><h3>Nova visita</h3><button onclick="closeModal()">&times;</button></div>' +
+    '<div class="modal-body">' +
+      '<label class="campo"><span>Cliente *</span><select class="input" id="visCliente">'+clientesHtml+'</select></label>' +
+      '<div class="row2">' +
+        '<label class="campo"><span>Data da visita</span><input type="date" class="input" id="visDataVisita" value="'+d.dataVisita+'"></label>' +
+        '<label class="campo"><span>Próximo follow-up</span><input type="date" class="input" id="visDataFollowup" value="'+d.dataFollowup+'"></label>' +
+      '</div>' +
+      '<label class="campo"><span>Observações</span><textarea class="input" id="visObs" rows="3">'+esc(d.observacoes)+'</textarea></label>' +
+      '<div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="salvarVisita()">Salvar</button></div>' +
+    '</div></div></div>';
+}
+
+/* ---------------- Impressão ---------------- */
+function imprimirDoc(tipo, id, colecao) {
+  var doc = state[colecao].find(x => x.id === id);
+  if (!doc) return;
+  state.printDoc = { tipo, dados: doc };
+  render();
+  setTimeout(() => window.print(), 150);
+}
+function voltarDaImpressao() { state.printDoc = null; render(); }
+function imprimirDocGestor(colecao, id) {
+  var doc = (colecao === "quotes" ? state.admin.quotes : state.admin.orders).find(x => x.id === id);
+  if (!doc) return;
+  state.printDoc = { tipo: colecao === "quotes" ? "Orçamento" : "Pedido", dados: doc };
+  render();
+  setTimeout(() => window.print(), 150);
+}
+function renderPrint(doc) {
+  var d = doc.dados;
+  var linhas = d.itens.map(i => '<tr><td>'+esc(i.nome)+'</td><td>'+i.qtd+'</td><td>'+fmt(i.precoUnit)+'</td><td style="text-align:right">'+fmt(i.total)+'</td></tr>').join("");
+  return '<div class="print-toolbar no-print"><button class="btn btn-secondary" onclick="voltarDaImpressao()">&larr; Voltar</button><button class="btn btn-primary" onclick="window.print()">Imprimir / Salvar PDF</button></div>' +
+    '<div class="print-doc"><div class="print-head"><div><h1>NC</h1><p class="sub">Flanges e Plásticos</p></div>' +
+    '<div style="text-align:right"><p class="doc-num">'+esc(doc.tipo)+' Nº '+String(d.id).slice(0,8).toUpperCase()+'</p><p class="doc-date">'+esc(d.criadoEm)+'</p></div></div>' +
+    '<div class="print-grid"><div><p class="lbl">Cliente</p><p class="val">'+esc(d.clienteNome)+'</p><p style="color:#a89e93;margin:2px 0 0">'+esc(d.clienteTipo)+'</p></div>' +
+    '<div><p class="lbl">Representante</p><p class="val">'+esc(d.repNome)+'</p>' +
+    '<p style="color:#a89e93;margin:4px 0 0;font-size:12px">Pagamento: '+esc(d.formaPagamento||"—")+(d.carrierNome?' · Transportadora: '+esc(d.carrierNome):'')+'</p></div></div>' +
+    '<table class="print-table"><thead><tr><th>Produto</th><th>Qtd</th><th>Preço unit.</th><th style="text-align:right">Total</th></tr></thead><tbody>'+linhas+'</tbody></table>' +
+    (d.observacoes ? '<p style="font-size:12px;color:#6b625a;margin-bottom:14px"><b>Observações:</b> '+esc(d.observacoes)+'</p>' : '') +
+    '<div class="print-summary">' +
+      '<div><span>Subtotal</span><span>'+fmt(d.subtotal)+'</span></div>' +
+      (d.desconto ? '<div><span>Desconto ('+d.desconto+'%)</span><span>-'+fmt(d.subtotal - d.total)+'</span></div>' : '') +
+      '<div class="final"><span>Total</span><span>'+fmt(d.total)+'</span></div>' +
+    '</div>' +
+    '<p class="print-foot">Documento gerado pelo painel do representante NC em '+hoje()+'.</p></div>';
+}
+
+/* ================= Painel do Gestor ================= */
+function renderPainelGestor() {
+  var a = state.admin;
+  var tabsHtml = [["dashboard","Dashboard"],["representantes","Representantes"],["clientes","Clientes"],["orcamentos","Orçamentos"],["pedidos","Pedidos"],["precos","Preços"],["transportadoras","Transportadoras"]].map(t =>
+    '<button class="tab ' + (a.aba===t[0]?"active":"") + '" onclick="setAbaGestor(\''+t[0]+'\')">'+t[1]+'</button>'
+  ).join("");
+  var body =
+    a.aba === "dashboard" ? renderDashboard() :
+    a.aba === "representantes" ? renderAbaReps() :
+    a.aba === "clientes" ? renderAbaClientesGestor() :
+    a.aba === "orcamentos" ? renderAbaOrcamentosGestor() :
+    a.aba === "pedidos" ? renderAbaPedidosGestor() :
+    a.aba === "precos" ? renderAbaPrecos() : renderAbaTransportadoras();
+  return '<div class="header gestor no-print"><div><h1>NC · Painel do Gestor</h1><p>'+esc(state.gestorSession.nome)+' · '+a.reps.length+' representante(s) cadastrado(s)</p></div>' +
+    '<div class="actions"><button class="btn btn-secondary" onclick="abrirAlterarSenhaGestor()">Alterar minha senha</button><button class="btn btn-secondary" onclick="sairGestor()">Sair</button></div></div>' +
+    '<div class="tabs no-print">'+tabsHtml+'</div><main>'+body+'</main>' +
+    (state.modal ? renderModal() : '');
+}
+function abrirAlterarSenhaGestor() { state.modal = { type: "senhaGestor", erro: "" }; render(); }
+async function salvarSenhaGestor() {
+  var atual = document.getElementById("senhaAtual").value;
+  var nova = document.getElementById("senhaNova").value;
+  var confirmaNova = document.getElementById("senhaNovaConfirma").value;
+  if (!nova || nova !== confirmaNova) { state.modal.erro = "As senhas novas não coincidem."; render(); return; }
+  var hashAtual = await hashSenha(atual);
+  if (hashAtual !== await hashSenhaAtualGestor()) { state.modal.erro = "Senha atual incorreta."; render(); return; }
+  var hashNova = await hashSenha(nova);
+  await sb.from("gestores").update({ senha: hashNova }).eq("id", state.gestorSession.id);
+  state.modal = null; render();
+  alert("Senha alterada com sucesso.");
+}
+async function hashSenhaAtualGestor() {
+  const { data } = await sb.from("gestores").select("senha").eq("id", state.gestorSession.id).single();
+  return data ? data.senha : null;
+}
+function setAbaGestor(k) { state.admin.aba = k; render(); }
+function nomeRepAdmin(id) { return (state.admin.reps.find(r => r.id === id) || {}).nome || "—"; }
+
+/* ---- Dashboard ---- */
+function renderDashboard() {
+  var a = state.admin;
+  var repId = a.dashboardRepId || "";
+  var quotesF = repId ? a.quotes.filter(q => q.repId === repId) : a.quotes;
+  var ordersF = repId ? a.orders.filter(o => o.repId === repId) : a.orders;
+  var clientsF = repId ? a.clients.filter(c => c.rep_id === repId) : a.clients;
+
+  var totalClientes = clientsF.length;
+  var orcAberto = quotesF.filter(q => q.status === "Rascunho" || q.status === "Enviado").length;
+  var taxaConversao = quotesF.length ? Math.round((ordersF.length / quotesF.length) * 100) : 0;
+  var valorTotal = ordersF.reduce((s,o) => s + o.total, 0);
+  var ticketMedio = ordersF.length ? valorTotal / ordersF.length : 0;
+
+  var repsHtml = '<option value="">Todos os representantes</option>' + a.reps.map(r => '<option value="'+r.id+'" '+(r.id===repId?"selected":"")+'>'+esc(r.nome)+'</option>').join("");
+
+  var kpis = '<div class="kpi-grid">' +
+      '<div class="kpi-card"><p class="lbl">Total de clientes</p><p class="val">'+totalClientes+'</p></div>' +
+      '<div class="kpi-card"><p class="lbl">Orçamentos em aberto</p><p class="val">'+orcAberto+'</p></div>' +
+      '<div class="kpi-card"><p class="lbl">Taxa de conversão</p><p class="val">'+taxaConversao+'%</p></div>' +
+      '<div class="kpi-card"><p class="lbl">Valor total vendido</p><p class="val">'+fmt(valorTotal)+'</p></div>' +
+    '</div>';
+
+  if (repId) {
+    // Dashboard individual: KPIs extras + ticket médio + cidades que mais compram
+    kpis += '<div class="kpi-grid" style="grid-template-columns:repeat(2,1fr)">' +
+      '<div class="kpi-card"><p class="lbl">Número de pedidos</p><p class="val">'+ordersF.length+'</p></div>' +
+      '<div class="kpi-card"><p class="lbl">Ticket médio</p><p class="val">'+fmt(ticketMedio)+'</p></div>' +
+    '</div>';
+    var porCidade = {};
+    ordersF.forEach(o => {
+      var cli = a.clients.find(c => c.id === o.clientId);
+      var cidade = cli ? (cli.cidade || "Sem cidade") + (cli.estado ? "/"+cli.estado : "") : "Sem cidade";
+      porCidade[cidade] = (porCidade[cidade] || 0) + o.total;
+    });
+    var listaCidades = Object.entries(porCidade).sort((a,b) => b[1]-a[1]).slice(0, 8);
+    var cidadesHtml = listaCidades.length === 0 ? '<div class="empty">Sem pedidos ainda para esse representante.</div>' :
+      listaCidades.map(([cidade, valor]) => '<div class="list-item"><p class="titulo">'+esc(cidade)+'</p><p class="sub">'+fmt(valor)+'</p></div>').join("");
+    return '<div class="section-head"><h2>Dashboard — '+esc(nomeRepAdmin(repId))+'</h2><select class="input" style="max-width:280px" onchange="mudarDashboardRep(this.value)">'+repsHtml+'</select></div>' +
+      kpis +
+      '<h3 style="font-size:14px;color:#6b625a;margin-bottom:10px">Cidades que mais compram</h3>' +
+      '<div class="card">'+cidadesHtml+'</div>';
+  }
+
+  var porRegiao = {}; REGIOES.forEach(r => porRegiao[r] = { clientes: 0, valor: 0 });
+  a.clients.forEach(c => { var reg = REGIAO_POR_UF[c.estado]; if (reg) porRegiao[reg].clientes++; });
+  a.orders.forEach(o => {
+    var cli = a.clients.find(c => c.id === o.clientId);
+    var reg = cli ? REGIAO_POR_UF[cli.estado] : null;
+    if (reg) porRegiao[reg].valor += o.total;
+  });
+  var mapCells = {
+    "Norte": "grid-column:1/3; grid-row:1/2;", "Nordeste": "grid-column:3/5; grid-row:1/2;",
+    "Centro-Oeste": "grid-column:2/4; grid-row:2/3;", "Sudeste": "grid-column:3/5; grid-row:3/4;", "Sul": "grid-column:2/4; grid-row:4/5;",
+  };
+  var mapHtml = REGIOES.map(r => '<div class="map-cell" style="background:'+REGIAO_COR[r]+';'+mapCells[r]+'"><div class="nome">'+r+'</div><div class="num">'+porRegiao[r].clientes+' clientes</div><div class="val">'+fmt(porRegiao[r].valor)+'</div></div>').join("");
+
+  return '<div class="section-head"><h2>Dashboard</h2><select class="input" style="max-width:280px" onchange="mudarDashboardRep(this.value)">'+repsHtml+'</select></div>' +
+    kpis +
+    '<h3 style="font-size:14px;color:#6b625a;margin-bottom:10px">Clientes e vendas por região</h3>' +
+    '<div class="map-grid">'+mapHtml+'</div>';
+}
+function mudarDashboardRep(id) { state.admin.dashboardRepId = id; render(); }
+
+/* ---- Representantes ---- */
+function renderAbaReps() {
+  var a = state.admin;
+  var linhas = a.reps.map(r => {
+    var nC = a.clients.filter(c=>c.rep_id===r.id).length, nQ = a.quotes.filter(q=>q.repId===r.id).length, nO = a.orders.filter(o=>o.repId===r.id).length;
+    var foto = r.foto_url ? '<img src="'+esc(r.foto_url)+'" style="width:36px;height:36px;border-radius:999px;object-fit:cover;margin-right:10px">' : '<div style="width:36px;height:36px;border-radius:999px;background:#eee6d6;margin-right:10px"></div>';
+    return '<div class="list-item"><div style="display:flex;align-items:center">'+foto+'<div><p class="titulo">'+esc(r.nome)+'</p><p class="sub">@'+esc(r.usuario)+' · '+esc(r.cidade||"sem cidade")+(r.estado?"/"+esc(r.estado):"")+'</p></div></div>' +
+      '<div class="actions"><p class="sub">'+nC+' clientes · '+nQ+' orç. · '+nO+' pedidos</p>' +
+      '<button class="btn btn-ghost btn-sm" onclick="abrirEditarRepresentante(\''+r.id+'\')">Editar perfil</button>' +
+      '<button class="btn btn-yellow btn-sm" onclick="verDashboardRep(\''+r.id+'\')">Ver dashboard</button></div></div>';
+  }).join("") || '<div class="empty">Nenhum representante cadastrado ainda.</div>';
+  return '<div class="section-head"><h2>Representantes</h2><div class="actions"><button class="btn btn-secondary" onclick="exportarRepsCSV()">Exportar CSV</button><button class="btn btn-primary" onclick="abrirNovoRepresentante()">+ Novo representante</button></div></div><div class="card">'+linhas+'</div>';
+}
+function verDashboardRep(id) { state.admin.dashboardRepId = id; state.admin.aba = "dashboard"; render(); }
+function abrirEditarRepresentante(id) {
+  var r = state.admin.reps.find(x => x.id === id);
+  state.modal = { type: "editarRep", data: { ...r }, erro: "" };
+  render();
+}
+async function salvarEdicaoRepresentante() {
+  var d = state.modal.data;
+  var payload = {
+    endereco: document.getElementById("repEndereco").value.trim(),
+    numero: document.getElementById("repNumero").value.trim(),
+    bairro: document.getElementById("repBairro").value.trim(),
+    cidade: document.getElementById("repCidade").value.trim(),
+    estado: document.getElementById("repEstado").value,
+    cep: document.getElementById("repCep").value.trim(),
+    cpf: document.getElementById("repCpf").value.trim(),
+  };
+  var fileInput = document.getElementById("repFoto");
+  if (fileInput && fileInput.files && fileInput.files[0]) {
+    var file = fileInput.files[0];
+    var path = "rep_" + d.id + "_" + Date.now() + "_" + file.name.replace(/[^a-zA-Z0-9.]/g, "_");
+    const { error: upErr } = await sb.storage.from("fotos").upload(path, file, { upsert: true });
+    if (upErr) { state.modal.erro = "Erro ao enviar foto: " + upErr.message; render(); return; }
+    const { data: urlData } = sb.storage.from("fotos").getPublicUrl(path);
+    payload.foto_url = urlData.publicUrl;
+  }
+  await sb.from("reps").update(payload).eq("id", d.id);
+  state.admin.reps = state.admin.reps.map(r => r.id === d.id ? { ...r, ...payload } : r);
+  state.modal = null; render();
+}
+function abrirNovoRepresentante() { state.modal = { type: "representante", erro: "" }; render(); }
+async function salvarNovoRepresentante() {
+  var nome = document.getElementById("repNome").value.trim();
+  var usuario = document.getElementById("repUsuario").value.trim();
+  var senha = document.getElementById("repSenha").value;
+  if (!nome || !usuario || !senha) { state.modal.erro = "Preencha todos os campos."; render(); return; }
+  const { data: existente } = await sb.from("reps").select("id").ilike("usuario", usuario).maybeSingle();
+  if (existente) { state.modal.erro = "Esse usuário já existe."; render(); return; }
+  var senhaHash = await hashSenha(senha);
+  const { data, error } = await sb.from("reps").insert({ nome, usuario, senha: senhaHash }).select().single();
+  if (error) { state.modal.erro = "Erro: " + error.message; render(); return; }
+  state.admin.reps.push(data);
+  state.modal = null; render();
+}
+function exportarRepsCSV() { downloadCSV("representantes.csv", [["Nome","Usuário"], ...state.admin.reps.map(r=>[r.nome,r.usuario])]); }
+
+/* ---- Clientes (gestor) ---- */
+function renderAbaClientesGestor() {
+  var a = state.admin;
+  var linhas = a.clients.map(c => '<div class="list-item"><div><p class="titulo">'+esc(c.nome)+'</p><p class="sub">'+esc(c.tipo)+' · '+esc(c.cidade||"sem cidade")+(c.estado?"/"+esc(c.estado):"")+' · '+esc(c.documento||"sem doc.")+'</p></div><p class="sub">Rep: '+esc(nomeRepAdmin(c.rep_id))+'</p></div>').join("") || '<div class="empty">Nenhum cliente cadastrado ainda.</div>';
+  return '<div class="section-head"><h2>Todos os clientes</h2><button class="btn btn-secondary" onclick="exportarClientesCSV()">Exportar CSV</button></div><div class="card">'+linhas+'</div>';
+}
+function exportarClientesCSV() {
+  var a = state.admin;
+  downloadCSV("clientes.csv", [["Nome","Tipo","CNPJ/CPF","Endereço","CEP","Cidade","Estado","Representante"], ...a.clients.map(c=>[c.nome,c.tipo,c.documento,c.endereco,c.cep,c.cidade,c.estado,nomeRepAdmin(c.rep_id)])]);
+}
+
+/* ---- Orçamentos (gestor) com filtros ---- */
+function renderAbaOrcamentosGestor() {
+  var a = state.admin;
+  var lista = a.quotes.slice();
+  if (a.filtroProduto) lista = lista.filter(q => q.itens.some(i => i.productId === a.filtroProduto));
+  if (a.filtroValorMin) lista = lista.filter(q => q.total >= Number(a.filtroValorMin));
+  if (a.filtroValorMax) lista = lista.filter(q => q.total <= Number(a.filtroValorMax));
+  var produtosHtml = '<option value="">Todos os produtos</option>' + state.products.map(p => '<option value="'+p.id+'" '+(p.id===a.filtroProduto?"selected":"")+'>'+esc(p.nome)+'</option>').join("");
+  var linhas = lista.slice().reverse().map(q => '<div class="list-item"><div><p class="titulo">'+esc(q.clienteNome)+' <span style="color:#a89e93">· '+esc(q.criadoEm)+'</span></p><p class="sub">Rep: '+esc(q.repNome)+' · '+fmt(q.total)+'</p></div>' + badge(q.status) + '<button class="btn btn-ghost btn-sm" onclick="imprimirDocGestor(\'quotes\', \''+q.id+'\')">Imprimir</button></div>').join("") || '<div class="empty">Nenhum orçamento encontrado.</div>';
+  return '<div class="section-head"><h2>Todos os orçamentos</h2><button class="btn btn-secondary" onclick="exportarOrcamentosCSV()">Exportar CSV</button></div>' +
+    '<div class="filtro-bar"><select onchange="filtrarGestor(\'filtroProduto\', this.value)">'+produtosHtml+'</select>' +
+    '<input type="number" placeholder="Valor mín." oninput="filtrarGestor(\'filtroValorMin\', this.value)" value="'+a.filtroValorMin+'">' +
+    '<input type="number" placeholder="Valor máx." oninput="filtrarGestor(\'filtroValorMax\', this.value)" value="'+a.filtroValorMax+'"></div>' +
+    '<div class="card">'+linhas+'</div>';
+}
+function exportarOrcamentosCSV() { downloadCSV("orcamentos.csv", [["Data","Representante","Cliente","Total","Status"], ...state.admin.quotes.map(q=>[q.criadoEm,q.repNome,q.clienteNome,q.total,q.status])]); }
+
+/* ---- Pedidos (gestor) com filtros ---- */
+function renderAbaPedidosGestor() {
+  var a = state.admin;
+  var lista = a.orders.slice();
+  if (a.filtroProduto) lista = lista.filter(o => o.itens.some(i => i.productId === a.filtroProduto));
+  if (a.filtroValorMin) lista = lista.filter(o => o.total >= Number(a.filtroValorMin));
+  if (a.filtroValorMax) lista = lista.filter(o => o.total <= Number(a.filtroValorMax));
+  var produtosHtml = '<option value="">Todos os produtos</option>' + state.products.map(p => '<option value="'+p.id+'" '+(p.id===a.filtroProduto?"selected":"")+'>'+esc(p.nome)+'</option>').join("");
+  var linhas = lista.slice().reverse().map(o => '<div class="list-item"><div><p class="titulo">'+esc(o.clienteNome)+' <span style="color:#a89e93">· '+esc(o.criadoEm)+'</span></p><p class="sub">Rep: '+esc(o.repNome)+' · '+fmt(o.total)+(o.carrierNome?' · '+esc(o.carrierNome):'')+'</p></div>' + badge(o.status) + '<button class="btn btn-ghost btn-sm" onclick="imprimirDocGestor(\'orders\', \''+o.id+'\')">Imprimir</button></div>').join("") || '<div class="empty">Nenhum pedido encontrado.</div>';
+  return '<div class="section-head"><h2>Todos os pedidos</h2><button class="btn btn-secondary" onclick="exportarPedidosCSV()">Exportar CSV</button></div>' +
+    '<div class="filtro-bar"><select onchange="filtrarGestor(\'filtroProduto\', this.value)">'+produtosHtml+'</select>' +
+    '<input type="number" placeholder="Valor mín." oninput="filtrarGestor(\'filtroValorMin\', this.value)" value="'+a.filtroValorMin+'">' +
+    '<input type="number" placeholder="Valor máx." oninput="filtrarGestor(\'filtroValorMax\', this.value)" value="'+a.filtroValorMax+'"></div>' +
+    '<div class="card">'+linhas+'</div>';
+}
+function exportarPedidosCSV() { downloadCSV("pedidos.csv", [["Data","Representante","Cliente","Total","Status","Transportadora"], ...state.admin.orders.map(o=>[o.criadoEm,o.repNome,o.clienteNome,o.total,o.status,o.carrierNome])]); }
+function filtrarGestor(campo, valor) { state.admin[campo] = valor; render(); }
+
+/* ---- Tabela de preços (editável) ---- */
+function renderAbaPrecos() {
+  var linhas = state.products.map(p => {
+    return '<div class="list-item" style="align-items:flex-start">' +
+      '<div style="flex:1;min-width:200px"><input class="input" style="font-weight:700;margin-bottom:6px" value="'+esc(p.nome)+'" id="pnome_'+p.id+'">' +
+      '<div class="row2" style="margin-top:6px">' +
+        TIPOS_CLIENTE.map(t => '<label class="campo" style="margin-bottom:4px"><span>'+t+'</span><input type="number" step="0.01" class="input" id="pprc_'+p.id+'_'+t.replace(/[^a-zA-Z]/g,"")+'" value="'+(p.precos[t]||0)+'"></label>').join("") +
+      '</div></div>' +
+      '<button class="btn btn-primary btn-sm" onclick="salvarProduto(\''+p.id+'\')">Salvar</button>' +
+      '</div>';
+  }).join("");
+  return '<div class="section-head"><h2>Tabela de preços</h2><button class="btn btn-primary" onclick="abrirNovoProduto()">+ Novo produto</button></div><div class="card">'+linhas+'</div>' + (state.modal ? "" : "");
+}
+async function salvarProduto(id) {
+  var nome = document.getElementById("pnome_"+id).value.trim();
+  var precos = {};
+  TIPOS_CLIENTE.forEach(t => { precos[t] = Number(document.getElementById("pprc_"+id+"_"+t.replace(/[^a-zA-Z]/g,"")).value) || 0; });
+  await sb.from("products").update({ nome, precos }).eq("id", id);
+  state.products = state.products.map(p => p.id === id ? { ...p, nome, precos } : p);
+  render();
+}
+function abrirNovoProduto() { state.modal = { type: "produto" }; render(); }
+async function salvarNovoProduto() {
+  var nome = document.getElementById("novoProdNome").value.trim();
+  if (!nome) return;
+  var precos = {};
+  TIPOS_CLIENTE.forEach(t => { precos[t] = Number(document.getElementById("novoProdPrc_"+t.replace(/[^a-zA-Z]/g,"")).value) || 0; });
+  var id = "p" + Date.now();
+  await sb.from("products").insert({ id, nome, precos });
+  state.products.push({ id, nome, precos });
+  state.modal = null; render();
+}
+
+/* ---- Transportadoras ---- */
+function renderAbaTransportadoras() {
+  var linhas = state.carriers.map(c => '<div class="list-item"><div><p class="titulo">'+esc(c.nome)+'</p><p class="sub">'+esc(c.telefone||"sem telefone")+'</p></div><button class="btn btn-danger btn-sm" onclick="excluirTransportadora(\''+c.id+'\')">Excluir</button></div>').join("") || '<div class="empty">Nenhuma transportadora cadastrada.</div>';
+  return '<div class="section-head"><h2>Transportadoras</h2><button class="btn btn-primary" onclick="abrirNovaTransportadora()">+ Nova transportadora</button></div><div class="card">'+linhas+'</div>';
+}
+function abrirNovaTransportadora() { state.modal = { type: "transportadora" }; render(); }
+async function salvarTransportadora() {
+  var nome = document.getElementById("transpNome").value.trim();
+  if (!nome) return;
+  var telefone = document.getElementById("transpTelefone").value.trim();
+  const { data } = await sb.from("carriers").insert({ nome, telefone }).select().single();
+  state.carriers.push(data);
+  state.admin.carriers.push(data);
+  state.modal = null; render();
+}
+async function excluirTransportadora(id) {
+  if (!confirm("Excluir essa transportadora?")) return;
+  await sb.from("carriers").delete().eq("id", id);
+  state.carriers = state.carriers.filter(c => c.id !== id);
+  state.admin.carriers = state.admin.carriers.filter(c => c.id !== id);
+  render();
+}
+
+/* extend modal dispatcher for gestor-only modals */
+(function(){
+  var original = renderModal;
+  renderModal = function() {
+    if (state.modal.type === "senhaGestor") {
+      return '<div class="overlay"><div class="modal"><div class="modal-head"><h3>Alterar minha senha</h3><button onclick="closeModal()">&times;</button></div><div class="modal-body">' +
+        '<label class="campo"><span>Senha atual</span><input type="password" class="input" id="senhaAtual"></label>' +
+        '<label class="campo"><span>Nova senha</span><input type="password" class="input" id="senhaNova"></label>' +
+        '<label class="campo"><span>Confirmar nova senha</span><input type="password" class="input" id="senhaNovaConfirma"></label>' +
+        (state.modal.erro ? '<p class="erro">'+esc(state.modal.erro)+'</p>' : '') +
+        '<div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="salvarSenhaGestor()">Salvar</button></div>' +
+        '</div></div></div>';
+    }
+    if (state.modal.type === "editarRep") {
+      var d = state.modal.data;
+      var ufHtml = '<option value="">—</option>' + UF_LIST.map(uf => '<option value="'+uf+'" '+(uf===d.estado?"selected":"")+'>'+uf+'</option>').join("");
+      return '<div class="overlay"><div class="modal"><div class="modal-head"><h3>Editar perfil — '+esc(d.nome)+'</h3><button onclick="closeModal()">&times;</button></div><div class="modal-body">' +
+        (d.foto_url ? '<img src="'+esc(d.foto_url)+'" style="width:64px;height:64px;border-radius:999px;object-fit:cover;margin-bottom:10px">' : '') +
+        '<label class="campo"><span>Foto de perfil</span><input type="file" accept="image/*" class="input" id="repFoto"></label>' +
+        '<label class="campo"><span>CPF</span><input class="input" id="repCpf" value="'+esc(d.cpf||"")+'"></label>' +
+        '<label class="campo"><span>Endereço (rua)</span><input class="input" id="repEndereco" value="'+esc(d.endereco||"")+'"></label>' +
+        '<div class="row2"><label class="campo"><span>Número</span><input class="input" id="repNumero" value="'+esc(d.numero||"")+'"></label>' +
+        '<label class="campo"><span>Bairro</span><input class="input" id="repBairro" value="'+esc(d.bairro||"")+'"></label></div>' +
+        '<div class="row3"><label class="campo"><span>CEP</span><input class="input" id="repCep" value="'+esc(d.cep||"")+'"></label>' +
+        '<label class="campo"><span>Cidade</span><input class="input" id="repCidade" value="'+esc(d.cidade||"")+'"></label>' +
+        '<label class="campo"><span>Estado</span><select class="input" id="repEstado">'+ufHtml+'</select></label></div>' +
+        (state.modal.erro ? '<p class="erro">'+esc(state.modal.erro)+'</p>' : '') +
+        '<div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="salvarEdicaoRepresentante()">Salvar</button></div>' +
+        '</div></div></div>';
+    }
+    if (state.modal.type === "representante") {
+      return '<div class="overlay"><div class="modal"><div class="modal-head"><h3>Novo representante</h3><button onclick="closeModal()">&times;</button></div><div class="modal-body">' +
+        '<label class="campo"><span>Nome completo</span><input class="input" id="repNome"></label>' +
+        '<label class="campo"><span>Usuário</span><input class="input" id="repUsuario"></label>' +
+        '<label class="campo"><span>Senha</span><input type="password" class="input" id="repSenha"></label>' +
+        (state.modal.erro ? '<p class="erro">'+esc(state.modal.erro)+'</p>' : '') +
+        '<div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="salvarNovoRepresentante()">Salvar</button></div>' +
+        '</div></div></div>';
+    }
+    if (state.modal.type === "produto") {
+      var camposPreco = TIPOS_CLIENTE.map(t => '<label class="campo"><span>'+t+'</span><input type="number" step="0.01" class="input" id="novoProdPrc_'+t.replace(/[^a-zA-Z]/g,"")+'" value="0"></label>').join("");
+      return '<div class="overlay"><div class="modal"><div class="modal-head"><h3>Novo produto</h3><button onclick="closeModal()">&times;</button></div><div class="modal-body">' +
+        '<label class="campo"><span>Nome do produto</span><input class="input" id="novoProdNome"></label>' + camposPreco +
+        '<div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="salvarNovoProduto()">Salvar</button></div>' +
+        '</div></div></div>';
+    }
+    if (state.modal.type === "transportadora") {
+      return '<div class="overlay"><div class="modal"><div class="modal-head"><h3>Nova transportadora</h3><button onclick="closeModal()">&times;</button></div><div class="modal-body">' +
+        '<label class="campo"><span>Nome</span><input class="input" id="transpNome"></label>' +
+        '<label class="campo"><span>Telefone</span><input class="input" id="transpTelefone"></label>' +
+        '<div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="salvarTransportadora()">Salvar</button></div>' +
+        '</div></div></div>';
+    }
+    return original();
+  };
+})();
+
+/* ---------------- Boot ---------------- */
+boot();
+</script>
+</body>
+</html>
