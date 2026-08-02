@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NC | Planejamento Estratégico</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --navy:#152238;
+    --navy-2:#1e3050;
+    --cream:#F5EFE4;
+    --cream-2:#EDE4D3;
+    --bordeaux:#7A2E3A;
+    --bordeaux-2:#5E212B;
+    --gold:#C9A227;
+    --ink:#2B2420;
+    --muted:#8A8072;
+    --danger:#B23A3A;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Georgia', 'Times New Roman', serif;
+    background:var(--navy);
+    color:var(--ink);
+    min-height:100vh;
+  }
+  /* ---------- LOGIN ---------- */
+  #tela-login{
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:radial-gradient(circle at 30% 20%, var(--navy-2), var(--navy) 70%);
+  }
+  .caixa-login{
+    background:var(--cream);
+    padding:44px 36px;
+    border-radius:6px;
+    width:100%;
+    max-width:360px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.35);
+    text-align:center;
+  }
+  .marca-nc{
+    display:inline-block;
+    background:var(--bordeaux);
+    color:var(--cream);
+    font-weight:bold;
+    letter-spacing:2px;
+    padding:6px 18px;
+    border-radius:4px;
+    font-size:14px;
+    margin-bottom:18px;
+  }
+  .caixa-login h1{
+    font-size:20px;
+    margin:0 0 6px;
+    color:var(--ink);
+  }
+  .caixa-login p.sub{
+    color:var(--muted);
+    font-size:13px;
+    margin:0 0 24px;
+  }
+  input[type="password"], input[type="text"], textarea{
+    width:100%;
+    font-family:'Georgia', serif;
+    padding:11px 12px;
+    border:1px solid #D8CDB8;
+    border-radius:4px;
+    background:#fff;
+    color:var(--ink);
+    font-size:14px;
+  }
+  textarea{resize:vertical; min-height:90px; line-height:1.5;}
+  .btn{
+    display:inline-block;
+    background:var(--bordeaux);
+    color:var(--cream);
+    border:none;
+    padding:11px 20px;
+    border-radius:4px;
+    font-family:'Georgia', serif;
+    font-size:14px;
+    letter-spacing:0.4px;
+    cursor:pointer;
+    transition:background .15s ease;
+  }
+  .btn:hover{background:var(--bordeaux-2);}
+  .btn-gold{background:var(--gold); color:var(--ink);}
+  .btn-gold:hover{background:#B8931F;}
+  .btn-ghost{background:transparent; color:var(--bordeaux); border:1px solid var(--bordeaux);}
+  .btn-danger{background:var(--danger); color:#fff;}
+  .btn-danger:hover{background:#8E2C2C;}
+  #login-erro{color:var(--danger); font-size:13px; margin-top:10px; min-height:16px;}
+  #tela-login .btn{width:100%; margin-top:16px;}
+
+  /* ---------- APP LAYOUT ---------- */
+  #app{display:none;}
+  header.topo{
+    background:var(--navy);
+    color:var(--cream);
+    padding:16px 24px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    border-bottom:3px solid var(--gold);
+    position:sticky; top:0; z-index:20;
+  }
+  header.topo .titulo{display:flex; align-items:center; gap:12px;}
+  header.topo .titulo h1{font-size:18px; margin:0; font-weight:normal; letter-spacing:.3px;}
+  header.topo .voltar{color:var(--cream); text-decoration:none; font-size:13px; border:1px solid rgba(245,239,228,.4); padding:6px 12px; border-radius:4px;}
+  header.topo .voltar:hover{background:rgba(245,239,228,.1);}
+  #status-save{font-size:12px; color:var(--cream); opacity:.75;}
+
+  .layout{display:flex; min-height:calc(100vh - 60px);}
+  nav.sidebar{
+    width:250px;
+    background:var(--cream-2);
+    padding:18px 0;
+    flex-shrink:0;
+    border-right:1px solid #DED2B8;
+  }
+  nav.sidebar .grupo-label{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:1px;
+    color:var(--muted);
+    padding:14px 20px 6px;
+  }
+  nav.sidebar button.item{
+    display:block;
+    width:100%;
+    text-align:left;
+    background:none;
+    border:none;
+    padding:10px 20px;
+    font-family:'Georgia', serif;
+    font-size:14px;
+    color:var(--ink);
+    cursor:pointer;
+    border-left:3px solid transparent;
+  }
+  nav.sidebar button.item:hover{background:#E4D9C1;}
+  nav.sidebar button.item.ativo{
+    background:#fff;
+    border-left:3px solid var(--bordeaux);
+    color:var(--bordeaux);
+    font-weight:bold;
+  }
+
+  main.conteudo{flex:1; padding:28px 32px; background:#FBF8F2; overflow-x:auto;}
+  .secao{display:none;}
+  .secao.ativa{display:block; max-width:920px;}
+  .secao h2{
+    font-size:24px;
+    margin:0 0 4px;
+    color:var(--navy);
+  }
+  .secao .desc{color:var(--muted); font-size:14px; margin:0 0 26px; line-height:1.5;}
+
+  .campo{margin-bottom:22px;}
+  .campo label{
+    display:block;
+    font-weight:bold;
+    font-size:14px;
+    color:var(--navy);
+    margin-bottom:6px;
+  }
+  .campo .ajuda{font-size:12.5px; color:var(--muted); margin:2px 0 8px; font-style:italic;}
+
+  .cartao{
+    background:#fff;
+    border:1px solid #E7DFCC;
+    border-radius:6px;
+    padding:20px;
+    margin-bottom:20px;
+  }
+  .cartao h3{margin:0 0 4px; font-size:16px; color:var(--bordeaux);}
+
+  /* tabela dinâmica */
+  table.dyn{width:100%; border-collapse:collapse; margin-top:6px;}
+  table.dyn th{
+    text-align:left; font-size:12.5px; color:var(--muted); text-transform:uppercase;
+    letter-spacing:.4px; padding:6px 8px; border-bottom:2px solid #E7DFCC;
+  }
+  table.dyn td{padding:6px 8px; border-bottom:1px solid #F0EAD9; vertical-align:top;}
+  table.dyn td input, table.dyn td textarea{font-size:13px; padding:7px 9px;}
+  table.dyn td.acao{width:36px; text-align:center;}
+  .link-remover{color:var(--danger); cursor:pointer; font-size:18px; line-height:1;}
+  .rodape-tabela{margin-top:10px;}
+
+  .barra-acoes{
+    display:flex; gap:10px; align-items:center; margin-top:24px;
+    padding-top:16px; border-top:1px solid #E7DFCC;
+  }
+  .msg-secao{font-size:13px; color:#4C7A4C; opacity:0; transition:opacity .2s;}
+  .msg-secao.ver{opacity:1;}
+
+  .grid-2{display:grid; grid-template-columns:1fr 1fr; gap:20px;}
+  @media (max-width:720px){
+    .layout{flex-direction:column;}
+    nav.sidebar{width:100%; display:flex; overflow-x:auto; padding:8px;}
+    nav.sidebar .grupo-label{display:none;}
+    nav.sidebar button.item{white-space:nowrap; border-left:none; border-bottom:3px solid transparent;}
+    nav.sidebar button.item.ativo{border-left:none; border-bottom:3px solid var(--bordeaux);}
+    .grid-2{grid-template-columns:1fr;}
+    main.conteudo{padding:20px 16px;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div id="tela-login">
+  <div class="caixa-login">
+    <span class="marca-nc">NC</span>
+    <h1>Planejamento Estratégico</h1>
+    <p class="sub">Acesso restrito à gestão</p>
+    <input type="password" id="senha-input" placeholder="Senha" />
+    <button class="btn" onclick="tentarLogin()">Entrar</button>
+    <div id="login-erro"></div>
+  </div>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="app">
+  <header class="topo">
+    <div class="titulo">
+      <h1>NC · Planejamento Estratégico</h1>
+    </div>
+    <div style="display:flex; align-items:center; gap:16px;">
+      <span id="status-save">—</span>
+      <a class="voltar" href="index.html">← Voltar ao sistema</a>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar" id="nav-sidebar"></nav>
+    <main class="conteudo" id="conteudo"></main>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   CONFIGURAÇÃO SUPABASE
+   Copie as mesmas duas linhas que já estão no seu index.html
+   (Project URL e anon key) — é o mesmo banco de dados.
+========================================================= */
+const SUPABASE_URL = "COLE_AQUI_A_PROJECT_URL";
+const SUPABASE_ANON_KEY = "COLE_AQUI_A_ANON_KEY";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* Senha de acesso — troque para a que preferir.
+   Pode ser a mesma senha do gestor do sistema principal. */
+const SENHA_ACESSO = "Nc@2026Suce$$o";
+
+function tentarLogin(){
+  const val = document.getElementById('senha-input').value;
+  if(val === SENHA_ACESSO){
+    sessionStorage.setItem('nc_planejamento_ok','1');
+    iniciarApp();
+  } else {
+    document.getElementById('login-erro').textContent = "Senha incorreta.";
+  }
+}
+document.getElementById('senha-input').addEventListener('keydown', e=>{
+  if(e.key === 'Enter') tentarLogin();
+});
+
+/* =========================================================
+   ESTRUTURA DAS SEÇÕES
+   Cada seção guarda seus dados como um objeto JSON numa
+   linha da tabela `planejamento` (coluna secao = id abaixo).
+========================================================= */
+const SECOES = [
+  {
+    grupo: "Estratégia",
+    id: "cascata",
+    titulo: "Cascata Estratégica",
+    desc: "As 5 perguntas centrais do planejamento (Playing to Win).",
+    campos: [
+      {tipo:"texto", key:"ambicao", label:"1. Qual é nossa ambição vencedora?", ajuda:"Declaração de futuro sobre o propósito da empresa."},
+      {tipo:"texto", key:"onde_jogar", label:"2. Onde vamos jogar?", ajuda:"Segmento de cliente, canal, produto, região, estágio da cadeia."},
+      {tipo:"texto", key:"como_vencer", label:"3. Como vamos vencer?", ajuda:"Vantagem competitiva: baixo custo ou diferenciação."},
+      {tipo:"texto", key:"competencias", label:"4. Quais competências precisamos ter?", ajuda:"O que precisamos fazer com excelência."},
+      {tipo:"texto", key:"sistemas_gestao", label:"5. Quais sistemas de gestão são necessários?", ajuda:"Processos e estruturas que sustentam as capacidades."},
+    ]
+  },
+  {
+    grupo: "Estratégia",
+    id: "identidade",
+    titulo: "Missão, Visão e Valores",
+    desc: "Os fundamentos da empresa.",
+    campos: [
+      {tipo:"texto", key:"missao", label:"Missão", ajuda:"Qual contribuição a empresa faz, e para quem?"},
+      {tipo:"texto", key:"visao_1ano", label:"Visão — 1 ano", ajuda:"Faturamento, lucro, nº de colaboradores, produtos, locais."},
+      {tipo:"texto", key:"visao_2anos", label:"Visão — 2 anos"},
+      {tipo:"texto", key:"visao_3anos", label:"Visão — 3 anos"},
+      {tipo:"texto", key:"famosos_por", label:"Somos famosos por"},
+      {tipo:"texto", key:"clientes_incluem", label:"Nossos clientes incluem"},
+      {tipo:"tabela", key:"valores", label:"Top 5 valores essenciais", ajuda:"Valor não negociável + exemplo de como é vivido na prática.",
+        colunas:[{key:"valor", label:"Valor", tipo:"input"}, {key:"exemplo", label:"Exemplo prático", tipo:"textarea"}]}
+    ]
+  },
+  {
+    grupo: "Mercado",
+    id: "clientes_mercado",
+    titulo: "Clientes e Mercado",
+    desc: "Segmentos, personas e como os clientes nos encontram.",
+    campos: [
+      {tipo:"tabela", key:"segmentos", label:"Mercados / segmentos-alvo",
+        colunas:[
+          {key:"segmento", label:"Segmento", tipo:"input"},
+          {key:"potencial_crescimento", label:"Potencial de crescimento", tipo:"input"},
+          {key:"potencial_lucro", label:"Potencial de lucro", tipo:"input"},
+          {key:"ciclo_vida", label:"Ciclo de vida", tipo:"input"},
+          {key:"persona", label:"Persona do cliente ideal", tipo:"textarea"},
+        ]},
+      {tipo:"texto", key:"criterios_compra", label:"Critérios de compra dos clientes"},
+      {tipo:"texto", key:"canais_atracao", label:"Como os clientes sabem de nós / canais de atração"},
+      {tipo:"texto", key:"oportunidades_atendimento", label:"Oportunidades para melhor atender os clientes"},
+    ]
+  },
+  {
+    grupo: "Mercado",
+    id: "produtos",
+    titulo: "Produtos",
+    desc: "Análise por produto ou linha.",
+    campos: [
+      {tipo:"tabela", key:"produtos", label:"Produtos / linhas",
+        colunas:[
+          {key:"produto", label:"Produto", tipo:"input"},
+          {key:"principais_clientes", label:"Principais clientes", tipo:"input"},
+          {key:"potencial", label:"Potencial (cresc./lucro)", tipo:"input"},
+          {key:"market_share", label:"Market share potencial", tipo:"input"},
+          {key:"forcas_fraquezas", label:"Forças e fraquezas vs. concorrência", tipo:"textarea"},
+          {key:"iniciativas", label:"Possíveis iniciativas", tipo:"textarea"},
+        ]}
+    ]
+  },
+  {
+    grupo: "Mercado",
+    id: "concorrentes",
+    titulo: "Concorrentes",
+    desc: "Mapeamento da concorrência.",
+    campos: [
+      {tipo:"tabela", key:"concorrentes", label:"Concorrentes",
+        colunas:[
+          {key:"nome", label:"Nome", tipo:"input"},
+          {key:"forcas", label:"Forças", tipo:"textarea"},
+          {key:"fraquezas", label:"Fraquezas", tipo:"textarea"},
+          {key:"nicho", label:"Nicho", tipo:"input"},
+          {key:"ameaca", label:"Principal ameaça a nós", tipo:"textarea"},
+          {key:"combate", label:"Iniciativa para combater", tipo:"textarea"},
+        ]},
+      {tipo:"texto", key:"fatores_externos", label:"Outros fatores externos (governo, tecnologia, mercado de trabalho)"},
+    ]
+  },
+  {
+    grupo: "Diagnóstico",
+    id: "swot",
+    titulo: "SWOT",
+    desc: "Forças, fraquezas, oportunidades e ameaças.",
+    campos: [
+      {tipo:"texto", key:"forcas", label:"Forças"},
+      {tipo:"texto", key:"fraquezas", label:"Fraquezas"},
+      {tipo:"texto", key:"oportunidades", label:"Oportunidades-chave"},
+      {tipo:"texto", key:"ameacas", label:"Ameaças-chave"},
+      {tipo:"texto", key:"construir_forcas", label:"Como vamos construir forças para aproveitar as oportunidades"},
+      {tipo:"texto", key:"defender_ameacas", label:"Como vamos nos defender das ameaças"},
+    ]
+  },
+  {
+    grupo: "Diagnóstico",
+    id: "vantagem",
+    titulo: "Vantagem Competitiva",
+    desc: "O que fazemos melhor — hoje e no futuro.",
+    campos: [
+      {tipo:"texto", key:"melhor_hoje", label:"O que fazemos melhor hoje"},
+      {tipo:"texto", key:"melhorar_futuro", label:"O que deveríamos fazer melhor daqui pra frente"},
+      {tipo:"texto", key:"implicacoes", label:"Implicações para a estratégia"},
+    ]
+  },
+  {
+    grupo: "Financeiro",
+    id: "metas_financeiras",
+    titulo: "Metas Financeiras",
+    desc: "Objetivos gerais de faturamento e retorno.",
+    campos: [
+      {tipo:"input", key:"objetivo_faturamento", label:"Objetivo de faturamento"},
+      {tipo:"input", key:"objetivo_retorno", label:"Objetivo de retorno / lucro"},
+      {tipo:"select", key:"prazo", label:"Prazo da meta", opcoes:["Mensal","Trimestral","Anual"]},
+      {tipo:"texto", key:"obs_metas", label:"Observações"},
+    ]
+  },
+  {
+    grupo: "Financeiro",
+    id: "orcamento",
+    titulo: "Orçamento (Plano de Contas)",
+    desc: "Orçamento estruturado por conta, para comparar orçado x realizado depois.",
+    campos: [
+      {tipo:"tabela", key:"contas", label:"Plano de contas",
+        colunas:[
+          {key:"conta", label:"Conta", tipo:"input"},
+          {key:"tipo", label:"Tipo", tipo:"select", opcoes:["Receita","Dedução de Receita","Custo Variável","Custo Fixo","Despesa Operacional","Despesa Financeira","Investimento","Outro"]},
+          {key:"orcado", label:"Valor orçado", tipo:"input"},
+          {key:"periodo", label:"Período", tipo:"input"},
+          {key:"obs", label:"Observações", tipo:"textarea"},
+        ]}
+    ]
+  },
+  {
+    grupo: "Execução",
+    id: "metas_indicadores_area",
+    titulo: "Metas e Indicadores por Área",
+    desc: "Objetivo específico de cada área, vinculado à meta geral, e os KPIs acompanhados.",
+    campos: [
+      {tipo:"tabela", key:"metas_area", label:"Metas por área",
+        colunas:[
+          {key:"area", label:"Área", tipo:"input"},
+          {key:"objetivo", label:"Objetivo da área", tipo:"textarea"},
+          {key:"responsavel", label:"Responsável", tipo:"input"},
+          {key:"prazo", label:"Prazo", tipo:"input"},
+        ]},
+      {tipo:"tabela", key:"indicadores_gerais", label:"Indicadores gerais (visão do gestor)",
+        colunas:[
+          {key:"indicador", label:"Indicador", tipo:"input"},
+          {key:"meta", label:"Meta", tipo:"input"},
+          {key:"frequencia", label:"Frequência", tipo:"input"},
+          {key:"responsavel", label:"Responsável por acompanhar", tipo:"input"},
+        ]},
+      {tipo:"tabela", key:"indicadores_area", label:"Indicadores por área",
+        colunas:[
+          {key:"area", label:"Área", tipo:"input"},
+          {key:"indicador", label:"Indicador", tipo:"input"},
+          {key:"meta", label:"Meta", tipo:"input"},
+          {key:"frequencia", label:"Frequência", tipo:"input"},
+        ]},
+    ]
+  },
+  {
+    grupo: "Execução",
+    id: "iniciativas",
+    titulo: "Plano de Ação — Iniciativas Gerais",
+    desc: "3 a 5 prioridades estratégicas da empresa como um todo.",
+    campos: [
+      {tipo:"tabela", key:"lista_iniciativas", label:"Lista de iniciativas",
+        colunas:[
+          {key:"iniciativa", label:"Iniciativa", tipo:"input"},
+          {key:"responsavel", label:"Responsável", tipo:"input"},
+          {key:"prioridade", label:"Prioridade", tipo:"select", opcoes:["Alta","Média","Baixa"]},
+        ]},
+      {tipo:"tabela", key:"planos_acao", label:"Detalhamento do plano de ação",
+        colunas:[
+          {key:"titulo", label:"Título da iniciativa", tipo:"input"},
+          {key:"sucesso", label:"Definição de sucesso / métricas", tipo:"textarea"},
+          {key:"orcamento", label:"Orçamento", tipo:"input"},
+          {key:"marcos", label:"Marcos de curto prazo", tipo:"textarea"},
+          {key:"riscos", label:"Riscos-chave", tipo:"textarea"},
+          {key:"o_que_parar", label:"O que parar de fazer para liberar tempo", tipo:"textarea"},
+        ]},
+    ]
+  },
+  {
+    grupo: "Execução",
+    id: "plano_area",
+    titulo: "Plano de Ação por Área",
+    desc: "Ações específicas de cada área/departamento.",
+    campos: [
+      {tipo:"tabela", key:"acoes_area", label:"Ações por área",
+        colunas:[
+          {key:"area", label:"Área", tipo:"select", opcoes:["Distribuição","Qualidade","RH","Finanças","Marketing","Vendas","Desenvolvimento de Produto","Fabricação/Operações","Cadeia de Suprimentos","Contabilidade","P&D","Outra"]},
+          {key:"acao", label:"Ação / sub-iniciativa", tipo:"textarea"},
+          {key:"responsavel", label:"Responsável", tipo:"input"},
+          {key:"prazo", label:"Prazo", tipo:"input"},
+          {key:"status", label:"Status", tipo:"select", opcoes:["Não iniciado","Em andamento","Concluído","Atrasado"]},
+        ]}
+    ]
+  },
+  {
+    grupo: "Crescimento",
+    id: "crescimento",
+    titulo: "Crescimento",
+    desc: "Perguntas-gatilho para destravar crescimento.",
+    campos: [
+      {tipo:"texto", key:"reativar_clientes", label:"O que fazer para reativar clientes que não compram mais?", ajuda:"Desdobre em: o quê, quem, quando, onde, por quê, como, quanto custa."},
+      {tipo:"texto", key:"diferenciar_concorrentes", label:"O que fazer para os clientes pensarem que não devem comprar de outra empresa?", ajuda:"Mesmo desdobramento acima."},
+    ]
+  },
+  {
+    grupo: "Crescimento",
+    id: "trilha_desenvolvimento",
+    titulo: "Trilha do Desenvolvimento",
+    desc: "Registro dos estágios de crescimento da empresa.",
+    campos: [
+      {tipo:"tabela", key:"estagios", label:"Estágios de crescimento",
+        colunas:[
+          {key:"estagio", label:"Estágio (1-10)", tipo:"input"},
+          {key:"ano", label:"Ano", tipo:"input"},
+          {key:"faturamento", label:"Faturamento", tipo:"input"},
+          {key:"mudancas", label:"Mudanças-chave", tipo:"textarea"},
+        ]},
+      {tipo:"texto", key:"habilidades_unicas_empresa", label:"3 habilidades únicas da empresa"},
+      {tipo:"texto", key:"principais_delegacoes", label:"3 principais delegações"},
+    ]
+  },
+];
+
+/* =========================================================
+   ESTADO
+========================================================= */
+let estado = {};   // { secaoId: {campoKey: valor ou [linhas]} }
+let secaoAtiva = SECOES[0].id;
+
+async function iniciarApp(){
+  document.getElementById('tela-login').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  montarSidebar();
+  await carregarDados();
+  renderSecao(secaoAtiva);
+}
+
+/* checa sessão ao carregar */
+window.addEventListener('DOMContentLoaded', ()=>{
+  if(sessionStorage.getItem('nc_planejamento_ok') === '1'){
+    iniciarApp();
+  }
+});
+
+function montarSidebar(){
+  const nav = document.getElementById('nav-sidebar');
+  nav.innerHTML = '';
+  let grupoAtual = null;
+  SECOES.forEach(sec=>{
+    if(sec.grupo !== grupoAtual){
+      grupoAtual = sec.grupo;
+      const label = document.createElement('div');
+      label.className = 'grupo-label';
+      label.textContent = grupoAtual;
+      nav.appendChild(label);
+    }
+    const btn = document.createElement('button');
+    btn.className = 'item' + (sec.id === secaoAtiva ? ' ativo' : '');
+    btn.textContent = sec.titulo;
+    btn.onclick = ()=>{ secaoAtiva = sec.id; montarSidebar(); renderSecao(sec.id); };
+    nav.appendChild(btn);
+  });
+}
+
+/* =========================================================
+   CARREGAR / SALVAR NO SUPABASE
+========================================================= */
+async function carregarDados(){
+  document.getElementById('status-save').textContent = 'Carregando...';
+  const { data, error } = await supabase.from('planejamento').select('secao, dados');
+  if(error){
+    console.error(error);
+    document.getElementById('status-save').textContent = 'Erro ao carregar';
+    return;
+  }
+  estado = {};
+  (data || []).forEach(row=>{ estado[row.secao] = row.dados || {}; });
+  document.getElementById('status-save').textContent = 'Dados carregados';
+}
+
+async function salvarSecao(secaoId){
+  const botao = document.getElementById('msg-' + secaoId);
+  const { error } = await supabase.from('planejamento').upsert({
+    secao: secaoId,
+    dados: estado[secaoId] || {},
+    atualizado_em: new Date().toISOString()
+  }, { onConflict: 'secao' });
+
+  if(error){
+    console.error(error);
+    if(botao){ botao.textContent = 'Erro ao salvar'; botao.style.color = '#B23A3A'; botao.classList.add('ver'); }
+    return;
+  }
+  if(botao){
+    botao.textContent = 'Salvo ✓';
+    botao.style.color = '#4C7A4C';
+    botao.classList.add('ver');
+    setTimeout(()=> botao.classList.remove('ver'), 2000);
+  }
+  document.getElementById('status-save').textContent = 'Salvo às ' + new Date().toLocaleTimeString('pt-BR');
+}
+
+/* =========================================================
+   RENDER DE SEÇÃO
+========================================================= */
+function renderSecao(id){
+  const sec = SECOES.find(s=>s.id === id);
+  const cont = document.getElementById('conteudo');
+  if(!estado[id]) estado[id] = {};
+
+  let html = `<div class="secao ativa"><h2>${sec.titulo}</h2><p class="desc">${sec.desc}</p>`;
+
+  sec.campos.forEach(campo=>{
+    if(campo.tipo === 'tabela'){
+      html += renderTabela(id, campo);
+    } else {
+      html += renderCampoSimples(id, campo);
+    }
+  });
+
+  html += `
+    <div class="barra-acoes">
+      <button class="btn" onclick="salvarSecao('${id}')">Salvar</button>
+      <span class="msg-secao" id="msg-${id}"></span>
+    </div>
+  </div>`;
+
+  cont.innerHTML = html;
+  ativarBindings(id, sec);
+}
+
+function renderCampoSimples(secId, campo){
+  const valorAtual = (estado[secId][campo.key] || '');
+  if(campo.tipo === 'select'){
+    const opcoes = campo.opcoes.map(o=>`<option value="${o}" ${o===valorAtual?'selected':''}>${o}</option>`).join('');
+    return `<div class="campo">
+      <label>${campo.label}</label>
+      ${campo.ajuda ? `<div class="ajuda">${campo.ajuda}</div>` : ''}
+      <select data-secao="${secId}" data-campo="${campo.key}" onchange="atualizarCampo(this)">${opcoes}</select>
+    </div>`;
+  }
+  if(campo.tipo === 'input'){
+    return `<div class="campo">
+      <label>${campo.label}</label>
+      ${campo.ajuda ? `<div class="ajuda">${campo.ajuda}</div>` : ''}
+      <input type="text" data-secao="${secId}" data-campo="${campo.key}" value="${escapeAttr(valorAtual)}" oninput="atualizarCampo(this)">
+    </div>`;
+  }
+  // textarea (default: texto)
+  return `<div class="campo">
+    <label>${campo.label}</label>
+    ${campo.ajuda ? `<div class="ajuda">${campo.ajuda}</div>` : ''}
+    <textarea data-secao="${secId}" data-campo="${campo.key}" oninput="atualizarCampo(this)">${escapeHtml(valorAtual)}</textarea>
+  </div>`;
+}
+
+function renderTabela(secId, campo){
+  const linhas = estado[secId][campo.key] || [];
+  let cabecalho = campo.colunas.map(c=>`<th>${c.label}</th>`).join('') + '<th></th>';
+  let corpo = linhas.map((linha, idx)=> linhaTabelaHtml(secId, campo, linha, idx)).join('');
+
+  return `<div class="cartao">
+    <h3>${campo.label}</h3>
+    ${campo.ajuda ? `<div class="ajuda">${campo.ajuda}</div>` : ''}
+    <table class="dyn" id="tabela-${secId}-${campo.key}">
+      <thead><tr>${cabecalho}</tr></thead>
+      <tbody>${corpo}</tbody>
+    </table>
+    <div class="rodape-tabela">
+      <button class="btn btn-ghost" onclick="adicionarLinha('${secId}','${campo.key}')">+ Adicionar linha</button>
+    </div>
+  </div>`;
+}
+
+function linhaTabelaHtml(secId, campo, linha, idx){
+  const celulas = campo.colunas.map(col=>{
+    const val = linha[col.key] || '';
+    if(col.tipo === 'select'){
+      const opcoes = col.opcoes.map(o=>`<option value="${o}" ${o===val?'selected':''}>${o}</option>`).join('');
+      return `<td><select data-linha="${idx}" data-col="${col.key}" onchange="atualizarCelula('${secId}','${campo.key}', this)">${opcoes}</select></td>`;
+    }
+    if(col.tipo === 'textarea'){
+      return `<td><textarea data-linha="${idx}" data-col="${col.key}" oninput="atualizarCelula('${secId}','${campo.key}', this)">${escapeHtml(val)}</textarea></td>`;
+    }
+    return `<td><input type="text" data-linha="${idx}" data-col="${col.key}" value="${escapeAttr(val)}" oninput="atualizarCelula('${secId}','${campo.key}', this)"></td>`;
+  }).join('');
+  return `<tr>${celulas}<td class="acao"><span class="link-remover" onclick="removerLinha('${secId}','${campo.key}', ${idx})" title="Remover linha">✕</span></td></tr>`;
+}
+
+function ativarBindings(){ /* reservado para extensões futuras */ }
+
+/* =========================================================
+   MUTAÇÕES DE ESTADO
+========================================================= */
+function atualizarCampo(el){
+  const secId = el.dataset.secao;
+  const key = el.dataset.campo;
+  estado[secId][key] = el.value;
+}
+
+function atualizarCelula(secId, campoKey, el){
+  const idx = parseInt(el.dataset.linha, 10);
+  const col = el.dataset.col;
+  if(!estado[secId][campoKey]) estado[secId][campoKey] = [];
+  if(!estado[secId][campoKey][idx]) estado[secId][campoKey][idx] = {};
+  estado[secId][campoKey][idx][col] = el.value;
+}
+
+function adicionarLinha(secId, campoKey){
+  if(!estado[secId][campoKey]) estado[secId][campoKey] = [];
+  estado[secId][campoKey].push({ id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()) });
+  renderSecao(secId);
+}
+
+function removerLinha(secId, campoKey, idx){
+  estado[secId][campoKey].splice(idx, 1);
+  renderSecao(secId);
+}
+
+/* =========================================================
+   UTIL
+========================================================= */
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+function escapeAttr(str){ return escapeHtml(str); }
+</script>
+</body>
+</html>
