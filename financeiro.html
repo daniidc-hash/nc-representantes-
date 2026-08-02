@@ -1,0 +1,1130 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NC | Financeiro</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --navy:#152238; --navy-2:#1e3050;
+    --cream:#F5EFE4; --cream-2:#EDE4D3;
+    --bordeaux:#7A2E3A; --bordeaux-2:#5E212B;
+    --gold:#C9A227; --ink:#2B2420; --muted:#8A8072;
+    --danger:#B23A3A; --ok:#4C7A4C; --warn:#B8862C;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:'Georgia','Times New Roman',serif; background:var(--navy); color:var(--ink); min-height:100vh;}
+
+  #tela-login{min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(circle at 30% 20%, var(--navy-2), var(--navy) 70%);}
+  .caixa-login{background:var(--cream); padding:44px 36px; border-radius:6px; width:100%; max-width:360px;
+    box-shadow:0 20px 60px rgba(0,0,0,.35); text-align:center;}
+  .marca-nc{display:inline-block; background:var(--bordeaux); color:var(--cream); font-weight:bold;
+    letter-spacing:2px; padding:6px 18px; border-radius:4px; font-size:14px; margin-bottom:18px;}
+  .caixa-login h1{font-size:20px; margin:0 0 6px;}
+  .caixa-login p.sub{color:var(--muted); font-size:13px; margin:0 0 20px;}
+  input, select, textarea{font-family:'Georgia',serif; padding:10px 11px; border:1px solid #D8CDB8;
+    border-radius:4px; background:#fff; color:var(--ink); font-size:14px;}
+  input[type="text"], input[type="password"], input[type="date"], input[type="number"]{width:100%;}
+  textarea{resize:vertical; min-height:70px; line-height:1.5; width:100%;}
+  .btn{display:inline-block; background:var(--bordeaux); color:var(--cream); border:none; padding:10px 18px;
+    border-radius:4px; font-family:'Georgia',serif; font-size:13.5px; cursor:pointer;}
+  .btn:hover{background:var(--bordeaux-2);}
+  .btn-ghost{background:transparent; color:var(--bordeaux); border:1px solid var(--bordeaux);}
+  .btn-gold{background:var(--gold); color:var(--ink);}
+  .btn-danger{background:var(--danger); color:#fff;}
+  .btn-sm{padding:6px 12px; font-size:12.5px;}
+  #login-erro{color:var(--danger); font-size:13px; margin-top:10px; min-height:16px;}
+  .campo-login{margin-bottom:12px; text-align:left;}
+  .campo-login label{display:block; font-size:12.5px; color:var(--muted); margin-bottom:4px;}
+  #tela-login .btn{width:100%; margin-top:6px;}
+
+  #app{display:none;}
+  header.topo{background:var(--navy); color:var(--cream); padding:16px 24px; display:flex;
+    align-items:center; justify-content:space-between; border-bottom:3px solid var(--gold);
+    position:sticky; top:0; z-index:20;}
+  header.topo h1{font-size:18px; margin:0; font-weight:normal;}
+  header.topo .voltar{color:var(--cream); text-decoration:none; font-size:13px;
+    border:1px solid rgba(245,239,228,.4); padding:6px 12px; border-radius:4px;}
+  header.topo .voltar:hover{background:rgba(245,239,228,.1);}
+  #quem-lancou{font-size:12px; opacity:.8;}
+
+  .layout{display:flex; min-height:calc(100vh - 60px);}
+  nav.sidebar{width:220px; background:var(--cream-2); padding:18px 0; flex-shrink:0; border-right:1px solid #DED2B8;}
+  nav.sidebar button.item{display:block; width:100%; text-align:left; background:none; border:none;
+    padding:11px 20px; font-family:'Georgia',serif; font-size:14px; color:var(--ink); cursor:pointer;
+    border-left:3px solid transparent;}
+  nav.sidebar button.item:hover{background:#E4D9C1;}
+  nav.sidebar button.item.ativo{background:#fff; border-left:3px solid var(--bordeaux); color:var(--bordeaux); font-weight:bold;}
+
+  main.conteudo{flex:1; padding:26px 30px; background:#FBF8F2; overflow-x:auto;}
+  .secao{display:none;}
+  .secao.ativa{display:block;}
+  .secao h2{font-size:22px; margin:0 0 4px; color:var(--navy);}
+  .secao .desc{color:var(--muted); font-size:13.5px; margin:0 0 20px;}
+
+  .kpis{display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); gap:14px; margin-bottom:24px;}
+  .kpi{background:#fff; border:1px solid #E7DFCC; border-radius:6px; padding:16px 18px;}
+  .kpi .label{font-size:12px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted);}
+  .kpi .valor{font-size:22px; font-weight:bold; color:var(--navy); margin-top:4px;}
+  .kpi.pos .valor{color:var(--ok);}
+  .kpi.neg .valor{color:var(--danger);}
+  .kpi.alerta .valor{color:var(--warn);}
+
+  .cartao{background:#fff; border:1px solid #E7DFCC; border-radius:6px; padding:18px; margin-bottom:18px;}
+  .cartao h3{margin:0 0 10px; font-size:15px; color:var(--bordeaux);}
+
+  .filtros{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; align-items:end;}
+  .filtros .campo-f{display:flex; flex-direction:column; gap:4px;}
+  .filtros .campo-f label{font-size:11.5px; color:var(--muted); text-transform:uppercase;}
+  .filtros input, .filtros select{font-size:13px; padding:7px 9px;}
+
+  table.dyn{width:100%; border-collapse:collapse; font-size:13px;}
+  table.dyn th{text-align:left; font-size:11.5px; color:var(--muted); text-transform:uppercase;
+    letter-spacing:.3px; padding:8px; border-bottom:2px solid #E7DFCC; white-space:nowrap;}
+  table.dyn td{padding:7px 8px; border-bottom:1px solid #F0EAD9; vertical-align:middle;}
+  table.dyn tr:hover td{background:#FBF6EA;}
+  .badge{display:inline-block; padding:2px 9px; border-radius:20px; font-size:11.5px; font-weight:bold;}
+  .badge-pago{background:#E4F0E4; color:var(--ok);}
+  .badge-pendente{background:#FBF0DC; color:var(--warn);}
+  .badge-atrasado{background:#F7E1E1; color:var(--danger);}
+  .link-remover{color:var(--danger); cursor:pointer; font-size:16px;}
+  .link-marcar{color:var(--ok); cursor:pointer; font-size:12.5px; text-decoration:underline;}
+
+  .form-linha{display:grid; grid-template-columns:repeat(auto-fit, minmax(140px,1fr)); gap:10px; margin-bottom:12px;}
+  .form-linha .campo label{display:block; font-size:11.5px; color:var(--muted); margin-bottom:4px; text-transform:uppercase;}
+
+  .msg{font-size:12.5px; margin-left:10px; opacity:0; transition:opacity .2s;}
+  .msg.ver{opacity:1;}
+  .msg.ok{color:var(--ok);} .msg.erro{color:var(--danger);}
+
+  .conciliacao-col{display:grid; grid-template-columns:1fr 1fr; gap:18px;}
+  .conciliacao-col h4{margin:0 0 8px; font-size:13.5px; color:var(--navy);}
+  .item-extrato{background:#fff; border:1px solid #E7DFCC; border-radius:5px; padding:10px 12px; margin-bottom:8px; font-size:13px;}
+  .item-extrato .sugestao{font-size:12px; color:var(--ok); margin-top:6px;}
+  .tag-tipo{font-size:11px; padding:2px 7px; border-radius:3px; font-weight:bold; margin-left:6px;}
+  .tag-entrada{background:#E4F0E4; color:var(--ok);}
+  .tag-saida{background:#F7E1E1; color:var(--danger);}
+
+  @media (max-width:760px){
+    .layout{flex-direction:column;}
+    nav.sidebar{width:100%; display:flex; overflow-x:auto; padding:8px;}
+    nav.sidebar button.item{white-space:nowrap; border-left:none; border-bottom:3px solid transparent;}
+    nav.sidebar button.item.ativo{border-left:none; border-bottom:3px solid var(--bordeaux);}
+    main.conteudo{padding:18px 14px;}
+    .conciliacao-col{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<div id="tela-login">
+  <div class="caixa-login">
+    <span class="marca-nc">NC</span>
+    <h1>Financeiro</h1>
+    <p class="sub">Contas a pagar, a receber e conciliação bancária</p>
+    <div class="campo-login">
+      <label>Seu nome (aparece nos lançamentos)</label>
+      <input type="text" id="nome-input" placeholder="Ex: Dani" />
+    </div>
+    <div class="campo-login">
+      <label>Senha</label>
+      <input type="password" id="senha-input" placeholder="Senha" />
+    </div>
+    <button class="btn" onclick="tentarLogin()">Entrar</button>
+    <div id="login-erro"></div>
+  </div>
+</div>
+
+<div id="app">
+  <header class="topo">
+    <h1>NC · Financeiro</h1>
+    <div style="display:flex; align-items:center; gap:16px;">
+      <span id="quem-lancou"></span>
+      <a class="voltar" href="index.html">← Sistema</a>
+      <a class="voltar" href="planejamento.html">Planejamento</a>
+    </div>
+  </header>
+  <div class="layout">
+    <nav class="sidebar" id="nav-sidebar"></nav>
+    <main class="conteudo" id="conteudo"></main>
+  </div>
+</div>
+
+<script>
+/* ================= CONFIG SUPABASE ================= */
+const SUPABASE_URL = "COLE_AQUI_A_PROJECT_URL";
+const SUPABASE_ANON_KEY = "COLE_AQUI_A_ANON_KEY";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const SENHA_ACESSO = "Nc@2026Suce$$o"; // pode trocar por uma senha própria do financeiro
+
+let usuarioAtual = "";
+
+function tentarLogin(){
+  const senha = document.getElementById('senha-input').value;
+  const nome = document.getElementById('nome-input').value.trim();
+  if(!nome){ document.getElementById('login-erro').textContent = "Informe seu nome."; return; }
+  if(senha !== SENHA_ACESSO){ document.getElementById('login-erro').textContent = "Senha incorreta."; return; }
+  usuarioAtual = nome;
+  sessionStorage.setItem('nc_financeiro_nome', nome);
+  iniciarApp();
+}
+document.getElementById('senha-input').addEventListener('keydown', e=>{ if(e.key==='Enter') tentarLogin(); });
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  const nomeSalvo = sessionStorage.getItem('nc_financeiro_nome');
+  if(nomeSalvo){ usuarioAtual = nomeSalvo; iniciarApp(); }
+});
+
+/* ================= DADOS EM MEMÓRIA ================= */
+let contasPagar = [];
+let contasReceber = [];
+let extrato = [];
+let saldoInicial = 0;
+
+const ABAS = [
+  {id:"resumo", titulo:"Resumo"},
+  {id:"pagar", titulo:"Contas a Pagar"},
+  {id:"receber", titulo:"Contas a Receber"},
+  {id:"relatorio_receber", titulo:"Relatório · A Receber"},
+  {id:"relatorio_pagar", titulo:"Relatório · A Pagar"},
+  {id:"fluxo", titulo:"Fluxo de Caixa"},
+  {id:"semanal", titulo:"Planejamento Semanal"},
+  {id:"conciliacao", titulo:"Conciliação Bancária"},
+  {id:"dre", titulo:"DRE Gerencial"},
+  {id:"orcado_realizado", titulo:"Orçado x Realizado"},
+];
+
+const GRUPOS_DRE = ["Receita","Dedução de Receita","Custo Variável","Custo Fixo","Despesa Operacional","Despesa Financeira","Investimento","Outro"];
+let abaAtiva = "resumo";
+
+const filtrosRelatorio = {
+  receber: {representante:'', regiao:'', pais:'', forma:'', status:'', usarSemana:false, semanaRef: hojeISOsafe()},
+  pagar:   {fornecedor:'', categoria:'', forma:'', status:'', banco:'', situacao:'', usarSemana:false, semanaRef: hojeISOsafe()},
+};
+function hojeISOsafe(){ return new Date().toISOString().slice(0,10); }
+
+let filtroSemanal = { semanaRef: hojeISOsafe(), modo: 'ambos' };
+let filtroFluxo = { modo: 'ambos' };
+
+async function iniciarApp(){
+  document.getElementById('tela-login').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('quem-lancou').textContent = "Logado como " + usuarioAtual;
+  montarSidebar();
+  await carregarTudo();
+  renderAba(abaAtiva);
+}
+
+function montarSidebar(){
+  const nav = document.getElementById('nav-sidebar');
+  nav.innerHTML = '';
+  ABAS.forEach(a=>{
+    const b = document.createElement('button');
+    b.className = 'item' + (a.id===abaAtiva ? ' ativo':'');
+    b.textContent = a.titulo;
+    b.onclick = ()=>{ abaAtiva = a.id; montarSidebar(); renderAba(a.id); };
+    nav.appendChild(b);
+  });
+}
+
+let orcamentoContas = []; // vem do módulo Planejamento (tabela planejamento, secao='orcamento')
+let bancos = [];
+
+async function carregarTudo(){
+  const [p, r, e, cfg, orc, bcs] = await Promise.all([
+    supabase.from('contas_pagar').select('*').order('vencimento', {ascending:true}),
+    supabase.from('contas_receber').select('*').order('vencimento', {ascending:true}),
+    supabase.from('extrato_bancario').select('*').order('data', {ascending:true}),
+    supabase.from('financeiro_config').select('*').eq('chave','saldo_inicial').maybeSingle(),
+    supabase.from('planejamento').select('dados').eq('secao','orcamento').maybeSingle(),
+    supabase.from('bancos').select('*').order('nome', {ascending:true}),
+  ]);
+  contasPagar = p.data || [];
+  contasReceber = r.data || [];
+  extrato = e.data || [];
+  saldoInicial = (cfg.data && cfg.data.valor && cfg.data.valor.valor) ? Number(cfg.data.valor.valor) : 0;
+  orcamentoContas = (orc.data && orc.data.dados && orc.data.dados.contas) ? orc.data.dados.contas : [];
+  bancos = bcs.data || [];
+}
+
+async function adicionarBancoRapido(){
+  const nome = prompt('Nome do banco/conta:');
+  if(!nome) return;
+  await supabase.from('bancos').insert({nome});
+  await carregarTudo();
+  renderAba('pagar');
+}
+
+/* ---- Semana (segunda a domingo) ---- */
+function inicioDaSemana(dataISO){
+  const d = new Date(dataISO + 'T00:00:00');
+  const diaSemana = d.getDay(); // 0=domingo...6=sábado
+  const deslocamento = diaSemana === 0 ? -6 : 1 - diaSemana; // volta até a segunda
+  d.setDate(d.getDate() + deslocamento);
+  return d;
+}
+function formatarISO(d){ return d.toISOString().slice(0,10); }
+function rangeSemana(dataISO){
+  const seg = inicioDaSemana(dataISO);
+  const dom = new Date(seg); dom.setDate(dom.getDate()+6);
+  return { inicio: formatarISO(seg), fim: formatarISO(dom) };
+}
+function formatarDataBR(iso){
+  if(!iso) return '';
+  const [a,m,d] = iso.split('-');
+  return `${d}/${m}/${a}`;
+}
+
+/* ================= UTIL ================= */
+function moeda(v){
+  return (Number(v)||0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+}
+function hojeISO(){ return new Date().toISOString().slice(0,10); }
+function escapeHtml(s){ return String(s??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+function statusConta(conta, tipo){
+  const pago = tipo==='pagar' ? conta.data_pagamento : conta.data_recebimento;
+  if(pago) return tipo==='pagar' ? 'Pago' : 'Recebido';
+  if(conta.vencimento && conta.vencimento < hojeISO()) return 'Atrasado';
+  return 'Pendente';
+}
+function badgeStatus(status){
+  const cls = status==='Pago'||status==='Recebido' ? 'badge-pago' : (status==='Atrasado' ? 'badge-atrasado' : 'badge-pendente');
+  return `<span class="badge ${cls}">${status}</span>`;
+}
+
+/* ================= RENDER PRINCIPAL ================= */
+function renderAba(id){
+  const cont = document.getElementById('conteudo');
+  if(id==='resumo') cont.innerHTML = viewResumo();
+  else if(id==='pagar') cont.innerHTML = viewContas('pagar');
+  else if(id==='receber') cont.innerHTML = viewContas('receber');
+  else if(id==='fluxo') cont.innerHTML = viewFluxo();
+  else if(id==='semanal') cont.innerHTML = viewSemanal();
+  else if(id==='conciliacao') cont.innerHTML = viewConciliacao();
+  else if(id==='relatorio_receber') cont.innerHTML = viewRelatorio('receber');
+  else if(id==='relatorio_pagar') cont.innerHTML = viewRelatorio('pagar');
+  else if(id==='dre') cont.innerHTML = viewDRE();
+  else if(id==='orcado_realizado') cont.innerHTML = viewOrcadoRealizado();
+  ativarHandlers(id);
+}
+
+/* ================= RESUMO ================= */
+function viewResumo(){
+  const em30 = new Date(); em30.setDate(em30.getDate()+30);
+  const em30ISO = em30.toISOString().slice(0,10);
+
+  const totalPagarAberto = contasPagar.filter(c=>!c.data_pagamento).reduce((s,c)=>s+Number(c.valor),0);
+  const totalReceberAberto = contasReceber.filter(c=>!c.data_recebimento).reduce((s,c)=>s+Number(c.valor),0);
+  const atrasadasPagar = contasPagar.filter(c=>!c.data_pagamento && c.vencimento < hojeISO()).length;
+  const atrasadasReceber = contasReceber.filter(c=>!c.data_recebimento && c.vencimento < hojeISO()).length;
+  const pagarProx30 = contasPagar.filter(c=>!c.data_pagamento && c.vencimento>=hojeISO() && c.vencimento<=em30ISO).reduce((s,c)=>s+Number(c.valor),0);
+  const receberProx30 = contasReceber.filter(c=>!c.data_recebimento && c.vencimento>=hojeISO() && c.vencimento<=em30ISO).reduce((s,c)=>s+Number(c.valor),0);
+  const naoConciliados = extrato.filter(e=>!e.conciliado).length;
+
+  return `<div class="secao ativa">
+    <h2>Resumo Financeiro</h2>
+    <p class="desc">Visão geral de contas a pagar, a receber e conciliação.</p>
+    <div class="kpis">
+      <div class="kpi"><div class="label">Saldo inicial cadastrado</div><div class="valor">${moeda(saldoInicial)}</div></div>
+      <div class="kpi neg"><div class="label">A pagar em aberto</div><div class="valor">${moeda(totalPagarAberto)}</div></div>
+      <div class="kpi pos"><div class="label">A receber em aberto</div><div class="valor">${moeda(totalReceberAberto)}</div></div>
+      <div class="kpi ${atrasadasPagar+atrasadasReceber>0?'alerta':''}"><div class="label">Contas atrasadas</div><div class="valor">${atrasadasPagar+atrasadasReceber}</div></div>
+      <div class="kpi"><div class="label">A pagar próx. 30 dias</div><div class="valor">${moeda(pagarProx30)}</div></div>
+      <div class="kpi"><div class="label">A receber próx. 30 dias</div><div class="valor">${moeda(receberProx30)}</div></div>
+      <div class="kpi ${naoConciliados>0?'alerta':''}"><div class="label">Extrato não conciliado</div><div class="valor">${naoConciliados} itens</div></div>
+    </div>
+    <div class="cartao">
+      <h3>Saldo inicial (data de referência)</h3>
+      <div class="form-linha">
+        <div class="campo"><label>Valor</label><input type="number" step="0.01" id="input-saldo-inicial" value="${saldoInicial}"></div>
+        <div class="campo" style="align-self:end;"><button class="btn btn-sm" onclick="salvarSaldoInicial()">Salvar saldo inicial</button></div>
+      </div>
+      <div class="ajuda" style="font-size:12px; color:var(--muted);">Usado como ponto de partida do Fluxo de Caixa Projetado.</div>
+    </div>
+  </div>`;
+}
+
+async function salvarSaldoInicial(){
+  const val = parseFloat(document.getElementById('input-saldo-inicial').value) || 0;
+  await supabase.from('financeiro_config').upsert({chave:'saldo_inicial', valor:{valor: val}}, {onConflict:'chave'});
+  saldoInicial = val;
+  renderAba('resumo');
+}
+
+/* ================= CONTAS A PAGAR / RECEBER ================= */
+function viewContas(tipo){
+  const lista = tipo==='pagar' ? contasPagar : contasReceber;
+  const rotuloParte = tipo==='pagar' ? 'Fornecedor' : 'Cliente';
+  const campoParte = tipo==='pagar' ? 'fornecedor' : 'cliente';
+  const campoData = tipo==='pagar' ? 'data_pagamento' : 'data_recebimento';
+  const rotuloData = tipo==='pagar' ? 'Pagamento' : 'Recebimento';
+
+  const extras = tipo==='receber' ? ['<th>Representante</th>','<th>Região</th>','<th>País</th>'] : ['<th>Banco</th>','<th>Situação</th>','<th>Plano de conta</th>'];
+  const colDocumentos = tipo==='pagar' ? '<th>Documentos</th>' : '';
+  const totalColunas = 9 + extras.length + (tipo==='pagar' ? 1 : 0);
+
+  const linhas = lista.map(c=>{
+    const status = statusConta(c, tipo);
+    const automatico = !!c.origem_pedido_id;
+    const extrasCel = tipo==='receber' ? `
+      <td>${escapeHtml(c.representante||'')}</td>
+      <td>${escapeHtml(c.regiao||'')}</td>
+      <td>${escapeHtml(c.pais||'')}</td>` : `
+      <td>${escapeHtml(c.banco||'')}</td>
+      <td><span class="link-marcar" onclick="alternarConfirmado('${c.id}', ${!c.confirmado})">${c.confirmado ? '<span class="badge badge-pago">Confirmado</span>' : '<span class="badge badge-pendente">Previsto</span>'}</span></td>
+      <td>${escapeHtml(c.plano_conta_nome||'—')}</td>`;
+    const celDocumentos = tipo==='pagar' ? `<td>${celulaDocumentos(c)}</td>` : '';
+    return `<tr>
+      <td>${escapeHtml(c[campoParte]||'')}</td>
+      <td>${escapeHtml(c.descricao||'')} ${automatico ? '<span class="badge badge-pendente" title="Gerado automaticamente pela emissão da nota fiscal">Auto (NF)</span>' : ''}
+        ${c.origem && c.origem!=='Manual' ? `<span class="badge badge-pago" title="Origem do lançamento">${escapeHtml(c.origem)}</span>` : ''}</td>
+      <td>${escapeHtml(c.categoria||'')}</td>
+      <td>${escapeHtml(c.grupo_dre||'')}</td>
+      <td>${moeda(c.valor)}</td>
+      <td>${c.vencimento||''}</td>
+      <td>${c[campoData]||'—'}</td>
+      <td>${badgeStatus(status)}</td>${extrasCel}
+      <td>${escapeHtml(c.lancado_por||'')}</td>
+      ${celDocumentos}
+      <td>
+        ${!c[campoData] ? `<span class="link-marcar" onclick="marcarComoQuitado('${tipo}','${c.id}')">Marcar ${tipo==='pagar'?'pago':'recebido'}</span>` : ''}
+        <span class="link-remover" onclick="removerConta('${tipo}','${c.id}')" title="Remover">✕</span>
+      </td>
+    </tr>`;
+  }).join('');
+
+  const camposExtrasForm = tipo==='receber' ? `
+        <div class="campo"><label>Representante</label><input type="text" id="novo-${tipo}-representante"></div>
+        <div class="campo"><label>Região</label><input type="text" id="novo-${tipo}-regiao"></div>
+        <div class="campo"><label>País</label><input type="text" id="novo-${tipo}-pais" value="Brasil"></div>` : `
+        <div class="campo"><label>Nº NF do fornecedor</label><input type="text" id="novo-${tipo}-nf-fornecedor"></div>
+        <div class="campo"><label>Banco</label>
+          <div style="display:flex; gap:6px;">
+            <select id="novo-${tipo}-banco" style="flex:1;">
+              <option value="">— selecione —</option>
+              ${bancos.map(b=>`<option value="${escapeHtml(b.nome)}">${escapeHtml(b.nome)}</option>`).join('')}
+            </select>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="adicionarBancoRapido()">+</button>
+          </div>
+        </div>
+        <div class="campo"><label>Plano de conta</label>
+          <select id="novo-${tipo}-planoconta">
+            <option value="">— nenhum —</option>
+            ${orcamentoContas.map(c=>`<option value="${c.id}" data-nome="${escapeHtml(c.conta||'')}">${escapeHtml(c.conta||'(sem nome)')}</option>`).join('')}
+          </select>
+        </div>
+        <div class="campo" style="align-self:end;">
+          <label style="display:flex; align-items:center; gap:6px; font-weight:normal;">
+            <input type="checkbox" id="novo-${tipo}-confirmado" style="width:auto;"> Já confirmada (não é previsão)
+          </label>
+        </div>`;
+
+  const opcoesFormaPagamento = ["Pix","Boleto","Transferência (TED/DOC)","Cartão de crédito","Cartão de débito","Dinheiro","Cheque","Outro"]
+    .map(o=>`<option value="${o}">${o}</option>`).join('');
+
+  const opcoesGrupo = GRUPOS_DRE.map(g=>`<option value="${g}">${g}</option>`).join('');
+
+  return `<div class="secao ativa">
+    <h2>Contas a ${tipo==='pagar'?'Pagar':'Receber'}</h2>
+    <p class="desc">${tipo==='receber' ? 'A maior parte é gerada automaticamente quando a nota fiscal do pedido é emitida. Use o formulário abaixo só para lançamentos avulsos (fora de pedido).' : 'Lançamento manual. Depois de criar, anexe o boleto/NF e, quando pagar, o comprovante.'}</p>
+
+    <div class="cartao">
+      <h3>Novo lançamento ${tipo==='receber' ? 'avulso' : ''}</h3>
+      <div class="form-linha">
+        <div class="campo"><label>${rotuloParte}</label><input type="text" id="novo-${tipo}-parte"></div>
+        <div class="campo"><label>Descrição</label><input type="text" id="novo-${tipo}-descricao"></div>
+        <div class="campo"><label>Categoria</label><input type="text" id="novo-${tipo}-categoria"></div>
+        <div class="campo"><label>Grupo (DRE)</label><select id="novo-${tipo}-grupo">${opcoesGrupo}</select></div>
+        <div class="campo"><label>Valor</label><input type="number" step="0.01" id="novo-${tipo}-valor"></div>
+        <div class="campo"><label>Vencimento</label><input type="date" id="novo-${tipo}-vencimento"></div>
+        <div class="campo"><label>Forma de ${tipo==='pagar'?'pagamento':'recebimento'}</label><select id="novo-${tipo}-forma">${opcoesFormaPagamento}</select></div>
+        ${camposExtrasForm}
+      </div>
+      <button class="btn" onclick="adicionarConta('${tipo}')">Adicionar</button>
+      <span class="msg" id="msg-novo-${tipo}"></span>
+    </div>
+
+    <div class="cartao">
+      <h3>Lançamentos (${lista.length})</h3>
+      <div style="overflow-x:auto;">
+        <table class="dyn">
+          <thead><tr><th>${rotuloParte}</th><th>Descrição</th><th>Categoria</th><th>Grupo</th><th>Valor</th><th>Vencimento</th><th>${rotuloData}</th><th>Status</th>${extras.join('')}<th>Lançado por</th>${colDocumentos}<th></th></tr></thead>
+          <tbody>${linhas || `<tr><td colspan="${totalColunas}" style="color:var(--muted); padding:16px 8px;">Nenhum lançamento ainda.</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+function celulaDocumentos(c){
+  const conta = c.arquivo_conta_path
+    ? `<a href="${urlArquivo(c.arquivo_conta_path)}" target="_blank">Boleto/NF</a>`
+    : `<label class="link-marcar" style="cursor:pointer;">+ boleto/NF<input type="file" style="display:none" accept="application/pdf,image/*" onchange="anexarArquivo('${c.id}','conta',this)"></label>`;
+  const comprovante = c.arquivo_comprovante_path
+    ? `<a href="${urlArquivo(c.arquivo_comprovante_path)}" target="_blank">Comprovante</a>`
+    : `<label class="link-marcar" style="cursor:pointer;">+ comprovante<input type="file" style="display:none" accept="application/pdf,image/*" onchange="anexarArquivo('${c.id}','comprovante',this)"></label>`;
+  return `${conta}<br>${comprovante}`;
+}
+
+function urlArquivo(path){
+  if(!path) return '#';
+  const { data } = supabase.storage.from('comprovantes-financeiro').getPublicUrl(path);
+  return data.publicUrl;
+}
+
+async function anexarArquivo(contaId, tipoArquivo, inputEl){
+  const file = inputEl.files[0];
+  if(!file) return;
+  const path = `contas-pagar/${contaId}/${tipoArquivo}-${Date.now()}-${file.name}`;
+  const { error: erroUpload } = await supabase.storage.from('comprovantes-financeiro').upload(path, file, {upsert:true});
+  if(erroUpload){ alert('Erro ao enviar arquivo: ' + erroUpload.message); return; }
+  const campo = tipoArquivo==='conta' ? 'arquivo_conta_path' : 'arquivo_comprovante_path';
+  const { error: erroUpdate } = await supabase.from('contas_pagar').update({[campo]: path}).eq('id', contaId);
+  if(erroUpdate){ alert('Arquivo enviado, mas houve erro ao vincular: ' + erroUpdate.message); return; }
+  await carregarTudo();
+  renderAba('pagar');
+}
+
+async function adicionarConta(tipo){
+  const parteKey = tipo==='pagar' ? 'fornecedor' : 'cliente';
+  const registro = {
+    [parteKey]: document.getElementById(`novo-${tipo}-parte`).value,
+    descricao: document.getElementById(`novo-${tipo}-descricao`).value,
+    categoria: document.getElementById(`novo-${tipo}-categoria`).value,
+    grupo_dre: document.getElementById(`novo-${tipo}-grupo`).value,
+    valor: parseFloat(document.getElementById(`novo-${tipo}-valor`).value) || 0,
+    vencimento: document.getElementById(`novo-${tipo}-vencimento`).value || null,
+    forma_pagamento: document.getElementById(`novo-${tipo}-forma`).value,
+    lancado_por: usuarioAtual,
+  };
+  if(tipo==='receber'){
+    registro.representante = document.getElementById('novo-receber-representante').value;
+    registro.regiao = document.getElementById('novo-receber-regiao').value;
+    registro.pais = document.getElementById('novo-receber-pais').value || 'Brasil';
+  } else {
+    registro.nota_fiscal_fornecedor = document.getElementById('novo-pagar-nf-fornecedor').value;
+    registro.banco = document.getElementById('novo-pagar-banco').value;
+    registro.confirmado = document.getElementById('novo-pagar-confirmado').checked;
+    const selPlano = document.getElementById('novo-pagar-planoconta');
+    registro.plano_conta_id = selPlano.value || null;
+    registro.plano_conta_nome = selPlano.value ? selPlano.options[selPlano.selectedIndex].dataset.nome : null;
+  }
+  registro.origem = 'Manual';
+  const tabela = tipo==='pagar' ? 'contas_pagar' : 'contas_receber';
+  const { error } = await supabase.from(tabela).insert(registro);
+  const msg = document.getElementById(`msg-novo-${tipo}`);
+  if(error){ msg.textContent='Erro ao salvar'; msg.className='msg ver erro'; console.error(error); return; }
+  msg.textContent='Adicionado ✓'; msg.className='msg ver ok';
+  await carregarTudo();
+  renderAba(tipo);
+}
+
+async function alternarConfirmado(id, novoValor){
+  await supabase.from('contas_pagar').update({confirmado: novoValor}).eq('id', id);
+  await carregarTudo();
+  renderAba('pagar');
+}
+
+async function marcarComoQuitado(tipo, id){
+  const tabela = tipo==='pagar' ? 'contas_pagar' : 'contas_receber';
+  const campoData = tipo==='pagar' ? 'data_pagamento' : 'data_recebimento';
+  await supabase.from(tabela).update({[campoData]: hojeISO()}).eq('id', id);
+  await carregarTudo();
+  renderAba(tipo);
+}
+
+async function removerConta(tipo, id){
+  if(!confirm('Remover este lançamento?')) return;
+  const tabela = tipo==='pagar' ? 'contas_pagar' : 'contas_receber';
+  await supabase.from(tabela).delete().eq('id', id);
+  await carregarTudo();
+  renderAba(tipo);
+}
+
+/* ================= FLUXO DE CAIXA PROJETADO ================= */
+function viewFluxo(){
+  const movimentos = [];
+  contasReceber.forEach(c=>{
+    const data = c.data_recebimento || c.vencimento;
+    if(data) movimentos.push({data, tipo:'Entrada', valor:Number(c.valor), origem:'Receber: '+(c.cliente||c.descricao||'')});
+  });
+  contasPagar.forEach(c=>{
+    const data = c.data_pagamento || c.vencimento;
+    if(data) movimentos.push({data, tipo:'Saída', valor:-Number(c.valor), origem:'Pagar: '+(c.fornecedor||c.descricao||'') + (c.confirmado ? '' : ' (previsto)')});
+  });
+  movimentos.sort((a,b)=> a.data.localeCompare(b.data));
+
+  let saldo = saldoInicial;
+  const linhasCompletas = movimentos.map(m=>{
+    saldo += m.valor;
+    return {...m, saldoAcumulado: saldo};
+  });
+
+  const visiveis = linhasCompletas.filter(m=>{
+    if(filtroFluxo.modo==='entradas') return m.tipo==='Entrada';
+    if(filtroFluxo.modo==='saidas') return m.tipo==='Saída';
+    return true;
+  });
+
+  const linhasHtml = visiveis.map(m=>{
+    const cor = m.valor>=0 ? 'var(--ok)' : 'var(--danger)';
+    return `<tr>
+      <td>${m.data}</td>
+      <td>${m.tipo}</td>
+      <td>${escapeHtml(m.origem)}</td>
+      <td style="color:${cor}">${moeda(m.valor)}</td>
+      <td style="font-weight:bold;">${moeda(m.saldoAcumulado)}</td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="secao ativa">
+    <h2>Fluxo de Caixa Projetado</h2>
+    <p class="desc">Saldo inicial (${moeda(saldoInicial)}) + contas a pagar/receber, ordenado por data. O saldo acumulado sempre considera entradas e saídas juntas, mesmo quando você filtra a visualização.</p>
+    <div class="cartao">
+      <div class="filtros" style="margin-bottom:14px;">
+        <div class="campo-f"><label>Ver</label>
+          <select id="fluxo-modo" onchange="mudarModoFluxo(this.value)">
+            <option value="ambos" ${filtroFluxo.modo==='ambos'?'selected':''}>Entradas e saídas juntas</option>
+            <option value="entradas" ${filtroFluxo.modo==='entradas'?'selected':''}>Só entradas (a receber)</option>
+            <option value="saidas" ${filtroFluxo.modo==='saidas'?'selected':''}>Só saídas (a pagar)</option>
+          </select>
+        </div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="dyn">
+          <thead><tr><th>Data</th><th>Tipo</th><th>Origem</th><th>Valor</th><th>Saldo acumulado</th></tr></thead>
+          <tbody>${linhasHtml || `<tr><td colspan="5" style="color:var(--muted); padding:16px 8px;">Sem lançamentos com data ainda.</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+function mudarModoFluxo(valor){
+  filtroFluxo.modo = valor;
+  renderAba('fluxo');
+}
+
+/* ================= CONCILIAÇÃO BANCÁRIA ================= */
+function viewConciliacao(){
+  const naoConciliados = extrato.filter(e=>!e.conciliado);
+  const conciliados = extrato.filter(e=>e.conciliado);
+
+  const totalEntradaExtrato = extrato.filter(e=>e.tipo==='Entrada').reduce((s,e)=>s+Number(e.valor),0);
+  const totalSaidaExtrato = extrato.filter(e=>e.tipo==='Saída').reduce((s,e)=>s+Number(e.valor),0);
+  const totalRecebidoSistema = contasReceber.filter(c=>c.data_recebimento).reduce((s,c)=>s+Number(c.valor),0);
+  const totalPagoSistema = contasPagar.filter(c=>c.data_pagamento).reduce((s,c)=>s+Number(c.valor),0);
+
+  const itensPendentes = naoConciliados.map(e=>{
+    const candidatos = tipo => (tipo==='Entrada' ? contasReceber.filter(c=>c.data_recebimento && !c._usado) : contasPagar.filter(c=>c.data_pagamento && !c._usado));
+    let sugestao = null;
+    const pool = e.tipo==='Entrada' ? contasReceber.filter(c=>c.data_recebimento) : contasPagar.filter(c=>c.data_pagamento);
+    sugestao = pool.find(c=> Math.abs(Number(c.valor) - Number(e.valor)) < 0.01 );
+
+    return `<div class="item-extrato">
+      <div><b>${e.data}</b> · ${escapeHtml(e.descricao||'')}
+        <span class="tag-tipo ${e.tipo==='Entrada'?'tag-entrada':'tag-saida'}">${e.tipo}</span>
+        <span style="float:right; font-weight:bold;">${moeda(e.valor)}</span>
+      </div>
+      ${sugestao ? `<div class="sugestao">Possível correspondência: ${escapeHtml(sugestao.cliente||sugestao.fornecedor||sugestao.descricao||'')} — ${moeda(sugestao.valor)}
+        <span class="link-marcar" onclick="confirmarConciliacao('${e.id}')">confirmar conciliação</span></div>`
+      : `<div class="sugestao" style="color:var(--muted);">Sem correspondência automática — <span class="link-marcar" onclick="confirmarConciliacao('${e.id}')">marcar como conciliado mesmo assim</span></div>`}
+    </div>`;
+  }).join('');
+
+  return `<div class="secao ativa">
+    <h2>Conciliação Bancária</h2>
+    <p class="desc">Compare o extrato do banco com os lançamentos do sistema.</p>
+
+    <div class="kpis">
+      <div class="kpi"><div class="label">Entradas no extrato</div><div class="valor">${moeda(totalEntradaExtrato)}</div></div>
+      <div class="kpi"><div class="label">Recebido no sistema</div><div class="valor">${moeda(totalRecebidoSistema)}</div></div>
+      <div class="kpi"><div class="label">Saídas no extrato</div><div class="valor">${moeda(totalSaidaExtrato)}</div></div>
+      <div class="kpi"><div class="label">Pago no sistema</div><div class="valor">${moeda(totalPagoSistema)}</div></div>
+    </div>
+
+    <div class="cartao">
+      <h3>Adicionar lançamento do extrato</h3>
+      <div class="form-linha">
+        <div class="campo"><label>Data</label><input type="date" id="extrato-data"></div>
+        <div class="campo"><label>Descrição</label><input type="text" id="extrato-descricao"></div>
+        <div class="campo"><label>Tipo</label>
+          <select id="extrato-tipo"><option value="Entrada">Entrada</option><option value="Saída">Saída</option></select>
+        </div>
+        <div class="campo"><label>Valor</label><input type="number" step="0.01" id="extrato-valor"></div>
+      </div>
+      <button class="btn" onclick="adicionarExtrato()">Adicionar</button>
+      <span class="msg" id="msg-extrato"></span>
+      <div class="ajuda" style="font-size:12px; color:var(--muted); margin-top:8px;">Dica: lance aqui linha a linha copiando do extrato do banco (data, descrição, valor, entrada ou saída).</div>
+    </div>
+
+    <div class="cartao">
+      <h3>Pendentes de conciliação (${naoConciliados.length})</h3>
+      ${itensPendentes || `<p style="color:var(--muted);">Tudo conciliado.</p>`}
+    </div>
+
+    <div class="cartao">
+      <h3>Já conciliados (${conciliados.length})</h3>
+      <div style="overflow-x:auto;">
+        <table class="dyn">
+          <thead><tr><th>Data</th><th>Descrição</th><th>Tipo</th><th>Valor</th><th></th></tr></thead>
+          <tbody>
+          ${conciliados.map(e=>`<tr>
+            <td>${e.data}</td><td>${escapeHtml(e.descricao||'')}</td>
+            <td><span class="tag-tipo ${e.tipo==='Entrada'?'tag-entrada':'tag-saida'}">${e.tipo}</span></td>
+            <td>${moeda(e.valor)}</td>
+            <td><span class="link-remover" onclick="removerExtrato('${e.id}')" title="Remover">✕</span></td>
+          </tr>`).join('') || `<tr><td colspan="5" style="color:var(--muted); padding:12px 8px;">Nada ainda.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function adicionarExtrato(){
+  const registro = {
+    data: document.getElementById('extrato-data').value || null,
+    descricao: document.getElementById('extrato-descricao').value,
+    tipo: document.getElementById('extrato-tipo').value,
+    valor: parseFloat(document.getElementById('extrato-valor').value) || 0,
+    conciliado: false,
+    lancado_por: usuarioAtual,
+  };
+  const { error } = await supabase.from('extrato_bancario').insert(registro);
+  const msg = document.getElementById('msg-extrato');
+  if(error){ msg.textContent='Erro ao salvar'; msg.className='msg ver erro'; console.error(error); return; }
+  msg.textContent='Adicionado ✓'; msg.className='msg ver ok';
+  await carregarTudo();
+  renderAba('conciliacao');
+}
+
+async function confirmarConciliacao(extratoId){
+  await supabase.from('extrato_bancario').update({conciliado:true}).eq('id', extratoId);
+  await carregarTudo();
+  renderAba('conciliacao');
+}
+
+async function removerExtrato(id){
+  if(!confirm('Remover este item do extrato?')) return;
+  await supabase.from('extrato_bancario').delete().eq('id', id);
+  await carregarTudo();
+  renderAba('conciliacao');
+}
+
+/* ================= RELATÓRIOS (A RECEBER / A PAGAR) ================= */
+function viewRelatorio(tipo){
+  const f = filtrosRelatorio[tipo];
+  const lista = tipo==='receber' ? contasReceber : contasPagar;
+  const campoData = tipo==='receber' ? 'data_recebimento' : 'data_pagamento';
+  const campoParte = tipo==='receber' ? 'cliente' : 'fornecedor';
+
+  const { inicio, fim } = rangeSemana(f.semanaRef);
+
+  let filtrados = lista.filter(c=>{
+    if(f.usarSemana && (!c.vencimento || c.vencimento < inicio || c.vencimento > fim)) return false;
+    if(tipo==='receber'){
+      if(f.representante && !(c.representante||'').toLowerCase().includes(f.representante.toLowerCase())) return false;
+      if(f.regiao && !(c.regiao||'').toLowerCase().includes(f.regiao.toLowerCase())) return false;
+      if(f.pais && !(c.pais||'').toLowerCase().includes(f.pais.toLowerCase())) return false;
+    } else {
+      if(f.fornecedor && !(c.fornecedor||'').toLowerCase().includes(f.fornecedor.toLowerCase())) return false;
+      if(f.categoria && !(c.categoria||'').toLowerCase().includes(f.categoria.toLowerCase())) return false;
+      if(f.banco && !(c.banco||'').toLowerCase().includes(f.banco.toLowerCase())) return false;
+      if(f.situacao==='previsto' && c.confirmado) return false;
+      if(f.situacao==='confirmado' && !c.confirmado) return false;
+    }
+    if(f.forma && !(c.forma_pagamento||'').toLowerCase().includes(f.forma.toLowerCase())) return false;
+    if(f.status){
+      const st = statusConta(c, tipo);
+      if(f.status==='inadimplente' && st!=='Atrasado') return false;
+      if(f.status==='quitado' && !(st==='Pago'||st==='Recebido')) return false;
+      if(f.status==='aberto' && (st==='Pago'||st==='Recebido')) return false;
+    }
+    return true;
+  });
+
+  const totalQuitado = filtrados.filter(c=>c[campoData]).reduce((s,c)=>s+Number(c.valor),0);
+  const totalAberto = filtrados.filter(c=>!c[campoData]).reduce((s,c)=>s+Number(c.valor),0);
+  const totalInadimplente = filtrados.filter(c=>statusConta(c,tipo)==='Atrasado').reduce((s,c)=>s+Number(c.valor),0);
+
+  const extrasHead = tipo==='receber' ? '<th>Representante</th><th>Região</th><th>País</th>' : '<th>Banco</th><th>Situação</th><th>Plano de conta</th>';
+  const linhas = filtrados.map(c=>{
+    const extrasCel = tipo==='receber'
+      ? `<td>${escapeHtml(c.representante||'')}</td><td>${escapeHtml(c.regiao||'')}</td><td>${escapeHtml(c.pais||'')}</td>`
+      : `<td>${escapeHtml(c.banco||'')}</td><td>${c.confirmado ? '<span class="badge badge-pago">Confirmado</span>' : '<span class="badge badge-pendente">Previsto</span>'}</td><td>${escapeHtml(c.plano_conta_nome||'—')}</td>`;
+    return `<tr>
+      <td>${escapeHtml(c[campoParte]||'')}</td>
+      <td>${escapeHtml(c.descricao||'')}</td>
+      <td>${moeda(c.valor)}</td>
+      <td>${c.vencimento||''}</td>
+      <td>${c[campoData]||'—'}</td>
+      <td>${badgeStatus(statusConta(c,tipo))}</td>
+      <td>${escapeHtml(c.forma_pagamento||'')}</td>
+      ${extrasCel}
+    </tr>`;
+  }).join('');
+
+  const filtrosExtras = tipo==='receber' ? `
+    <div class="campo-f"><label>Representante</label><input type="text" id="filtro-${tipo}-representante" value="${escapeHtml(f.representante)}"></div>
+    <div class="campo-f"><label>Região</label><input type="text" id="filtro-${tipo}-regiao" value="${escapeHtml(f.regiao)}"></div>
+    <div class="campo-f"><label>País</label><input type="text" id="filtro-${tipo}-pais" value="${escapeHtml(f.pais)}"></div>` : `
+    <div class="campo-f"><label>Fornecedor</label><input type="text" id="filtro-${tipo}-fornecedor" value="${escapeHtml(f.fornecedor)}"></div>
+    <div class="campo-f"><label>Categoria</label><input type="text" id="filtro-${tipo}-categoria" value="${escapeHtml(f.categoria)}"></div>
+    <div class="campo-f"><label>Banco</label><input type="text" id="filtro-${tipo}-banco" value="${escapeHtml(f.banco)}"></div>
+    <div class="campo-f"><label>Situação</label>
+      <select id="filtro-${tipo}-situacao">
+        <option value="" ${!f.situacao?'selected':''}>Todas</option>
+        <option value="previsto" ${f.situacao==='previsto'?'selected':''}>Prevista</option>
+        <option value="confirmado" ${f.situacao==='confirmado'?'selected':''}>Confirmada</option>
+      </select>
+    </div>`;
+
+  return `<div class="secao ativa">
+    <h2>Relatório · Contas a ${tipo==='receber'?'Receber':'Pagar'}</h2>
+    <p class="desc">Filtre e gere a visão que precisar. Marque "por semana" para ver só uma semana (segunda a domingo) por vez.</p>
+
+    <div class="cartao">
+      <div class="filtros">
+        ${filtrosExtras}
+        <div class="campo-f"><label>Forma de ${tipo==='receber'?'recebimento':'pagamento'}</label><input type="text" id="filtro-${tipo}-forma" value="${escapeHtml(f.forma)}"></div>
+        <div class="campo-f"><label>Status</label>
+          <select id="filtro-${tipo}-status">
+            <option value="" ${!f.status?'selected':''}>Todos</option>
+            <option value="aberto" ${f.status==='aberto'?'selected':''}>Em aberto</option>
+            <option value="quitado" ${f.status==='quitado'?'selected':''}>${tipo==='receber'?'Recebido':'Pago'}</option>
+            <option value="inadimplente" ${f.status==='inadimplente'?'selected':''}>Inadimplente / atrasado</option>
+          </select>
+        </div>
+        <div class="campo-f"><label><input type="checkbox" id="filtro-${tipo}-usarsemana" ${f.usarSemana?'checked':''}> Filtrar por semana</label></div>
+        <div class="campo-f"><button class="btn btn-sm" onclick="aplicarFiltroRelatorio('${tipo}')">Aplicar filtros</button></div>
+      </div>
+      ${f.usarSemana ? `
+      <div style="display:flex; align-items:center; gap:10px; margin-top:6px;">
+        <button class="btn btn-ghost btn-sm" onclick="navegarSemana('${tipo}',-7)">← Semana anterior</button>
+        <strong>${formatarDataBR(inicio)} a ${formatarDataBR(fim)}</strong>
+        <button class="btn btn-ghost btn-sm" onclick="navegarSemana('${tipo}',7)">Semana seguinte →</button>
+      </div>` : ''}
+    </div>
+
+    <div class="kpis">
+      <div class="kpi pos"><div class="label">${tipo==='receber'?'Recebido':'Pago'} (no filtro)</div><div class="valor">${moeda(totalQuitado)}</div></div>
+      <div class="kpi"><div class="label">Em aberto (no filtro)</div><div class="valor">${moeda(totalAberto)}</div></div>
+      <div class="kpi neg"><div class="label">Inadimplente (no filtro)</div><div class="valor">${moeda(totalInadimplente)}</div></div>
+    </div>
+
+    <div class="cartao">
+      <div style="overflow-x:auto;">
+        <table class="dyn">
+          <thead><tr><th>${tipo==='receber'?'Cliente':'Fornecedor'}</th><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>${tipo==='receber'?'Recebimento':'Pagamento'}</th><th>Status</th><th>Forma</th>${extrasHead}</tr></thead>
+          <tbody>${linhas || `<tr><td colspan="8" style="color:var(--muted); padding:16px 8px;">Nada encontrado com esses filtros.</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+function aplicarFiltroRelatorio(tipo){
+  const f = filtrosRelatorio[tipo];
+  if(tipo==='receber'){
+    f.representante = document.getElementById('filtro-receber-representante').value;
+    f.regiao = document.getElementById('filtro-receber-regiao').value;
+    f.pais = document.getElementById('filtro-receber-pais').value;
+  } else {
+    f.fornecedor = document.getElementById('filtro-pagar-fornecedor').value;
+    f.categoria = document.getElementById('filtro-pagar-categoria').value;
+    f.banco = document.getElementById('filtro-pagar-banco').value;
+    f.situacao = document.getElementById('filtro-pagar-situacao').value;
+  }
+  f.forma = document.getElementById(`filtro-${tipo}-forma`).value;
+  f.status = document.getElementById(`filtro-${tipo}-status`).value;
+  f.usarSemana = document.getElementById(`filtro-${tipo}-usarsemana`).checked;
+  renderAba(tipo==='receber' ? 'relatorio_receber' : 'relatorio_pagar');
+}
+
+function navegarSemana(tipo, deltaDias){
+  const f = filtrosRelatorio[tipo];
+  const d = new Date(f.semanaRef + 'T00:00:00');
+  d.setDate(d.getDate() + deltaDias);
+  f.semanaRef = formatarISO(d);
+  renderAba(tipo==='receber' ? 'relatorio_receber' : 'relatorio_pagar');
+}
+
+/* ================= DRE GERENCIAL ================= */
+let periodoDRE = { inicio: (()=>{ const d=new Date(); d.setDate(1); return formatarISO(d); })(), fim: hojeISOsafe() };
+
+function contarMesesNoPeriodo(inicioISO, fimISO){
+  const i = new Date(inicioISO + 'T00:00:00');
+  const f = new Date(fimISO + 'T00:00:00');
+  const meses = (f.getFullYear()-i.getFullYear())*12 + (f.getMonth()-i.getMonth()) + 1;
+  return Math.max(1, meses);
+}
+
+function definirPeriodoRapido(tipo){
+  const hoje = new Date();
+  let inicio, fim;
+  if(tipo==='mes'){
+    inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    fim = new Date(hoje.getFullYear(), hoje.getMonth()+1, 0);
+  } else if(tipo==='trimestre'){
+    const iniTrimestre = Math.floor(hoje.getMonth()/3)*3;
+    inicio = new Date(hoje.getFullYear(), iniTrimestre, 1);
+    fim = new Date(hoje.getFullYear(), iniTrimestre+3, 0);
+  } else if(tipo==='semestre'){
+    const iniSemestre = hoje.getMonth() < 6 ? 0 : 6;
+    inicio = new Date(hoje.getFullYear(), iniSemestre, 1);
+    fim = new Date(hoje.getFullYear(), iniSemestre+6, 0);
+  } else if(tipo==='ano'){
+    inicio = new Date(hoje.getFullYear(), 0, 1);
+    fim = new Date(hoje.getFullYear(), 11, 31);
+  }
+  periodoDRE.inicio = formatarISO(inicio);
+  periodoDRE.fim = formatarISO(fim);
+  renderAba(abaAtiva);
+}
+
+function viewDRE(){
+  const receber = contasReceber.filter(c=>c.data_recebimento && c.data_recebimento>=periodoDRE.inicio && c.data_recebimento<=periodoDRE.fim);
+  const pagar = contasPagar.filter(c=>c.data_pagamento && c.data_pagamento>=periodoDRE.inicio && c.data_pagamento<=periodoDRE.fim);
+
+  const somaGrupo = (lista, grupo) => lista.filter(c=>(c.grupo_dre||'Outro')===grupo).reduce((s,c)=>s+Number(c.valor),0);
+
+  const receitaBruta = somaGrupo(receber,'Receita');
+  const deducoes = somaGrupo(receber,'Dedução de Receita') + somaGrupo(pagar,'Dedução de Receita');
+  const receitaLiquida = receitaBruta - deducoes;
+  const custoVariavel = somaGrupo(pagar,'Custo Variável');
+  const margemContribuicao = receitaLiquida - custoVariavel;
+  const custoFixo = somaGrupo(pagar,'Custo Fixo');
+  const despesaOperacional = somaGrupo(pagar,'Despesa Operacional');
+  const resultadoOperacional = margemContribuicao - custoFixo - despesaOperacional;
+  const despesaFinanceira = somaGrupo(pagar,'Despesa Financeira');
+  const resultadoLiquido = resultadoOperacional - despesaFinanceira;
+  const investimentos = somaGrupo(pagar,'Investimento');
+
+  const linha = (label, valor, destaque) => `<tr ${destaque?'style="font-weight:bold; background:#FBF6EA;"':''}>
+    <td>${label}</td><td style="text-align:right;">${moeda(valor)}</td></tr>`;
+
+  return `<div class="secao ativa">
+    <h2>DRE Gerencial</h2>
+    <p class="desc">Baseado no que foi efetivamente pago e recebido (regime de caixa) no período, classificado pelo Grupo (DRE) de cada lançamento.</p>
+
+    <div class="cartao">
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+        <button class="btn btn-ghost btn-sm" onclick="definirPeriodoRapido('mes')">Este mês</button>
+        <button class="btn btn-ghost btn-sm" onclick="definirPeriodoRapido('trimestre')">Este trimestre</button>
+        <button class="btn btn-ghost btn-sm" onclick="definirPeriodoRapido('semestre')">Este semestre</button>
+        <button class="btn btn-ghost btn-sm" onclick="definirPeriodoRapido('ano')">Este ano</button>
+      </div>
+      <div class="form-linha">
+        <div class="campo"><label>De</label><input type="date" id="dre-inicio" value="${periodoDRE.inicio}"></div>
+        <div class="campo"><label>Até</label><input type="date" id="dre-fim" value="${periodoDRE.fim}"></div>
+        <div class="campo" style="align-self:end;"><button class="btn btn-sm" onclick="atualizarPeriodoDRE()">Atualizar período</button></div>
+      </div>
+      <div class="ajuda" style="font-size:12px; color:var(--muted); margin-top:4px;">Esse período também vale para a aba Orçado x Realizado.</div>
+    </div>
+
+    <div class="cartao">
+      <table class="dyn">
+        ${linha('Receita Bruta', receitaBruta)}
+        ${linha('(–) Deduções de Receita', -deducoes)}
+        ${linha('= Receita Líquida', receitaLiquida, true)}
+        ${linha('(–) Custos Variáveis', -custoVariavel)}
+        ${linha('= Margem de Contribuição', margemContribuicao, true)}
+        ${linha('(–) Custos Fixos', -custoFixo)}
+        ${linha('(–) Despesas Operacionais', -despesaOperacional)}
+        ${linha('= Resultado Operacional', resultadoOperacional, true)}
+        ${linha('(–) Despesas Financeiras', -despesaFinanceira)}
+        ${linha('= Resultado Líquido do Período', resultadoLiquido, true)}
+        ${linha('Investimentos no período (informativo)', investimentos)}
+      </table>
+    </div>
+  </div>`;
+}
+
+function atualizarPeriodoDRE(){
+  periodoDRE.inicio = document.getElementById('dre-inicio').value;
+  periodoDRE.fim = document.getElementById('dre-fim').value;
+  renderAba('dre');
+}
+
+/* ================= ORÇADO X REALIZADO ================= */
+function viewOrcadoRealizado(){
+  const receber = contasReceber.filter(c=>c.data_recebimento && c.data_recebimento>=periodoDRE.inicio && c.data_recebimento<=periodoDRE.fim);
+  const pagar = contasPagar.filter(c=>c.data_pagamento && c.data_pagamento>=periodoDRE.inicio && c.data_pagamento<=periodoDRE.fim && c.confirmado);
+
+  const meses = contarMesesNoPeriodo(periodoDRE.inicio, periodoDRE.fim);
+
+  const realizadoPorGrupo = {};
+  GRUPOS_DRE.forEach(g=> realizadoPorGrupo[g] = 0);
+  receber.forEach(c=>{ const g=c.grupo_dre||'Outro'; realizadoPorGrupo[g]=(realizadoPorGrupo[g]||0)+Number(c.valor); });
+  pagar.forEach(c=>{ const g=c.grupo_dre||'Outro'; realizadoPorGrupo[g]=(realizadoPorGrupo[g]||0)+Number(c.valor); });
+
+  const orcadoPorGrupo = {};
+  GRUPOS_DRE.forEach(g=> orcadoPorGrupo[g] = 0);
+  (orcamentoContas||[]).forEach(linha=>{
+    const g = linha.tipo || 'Outro';
+    const v = parseFloat(String(linha.orcado||'0').replace(/[^\d.,-]/g,'').replace(',','.')) || 0;
+    orcadoPorGrupo[g] = (orcadoPorGrupo[g]||0) + v * meses;
+  });
+
+  const linhas = GRUPOS_DRE.map(g=>{
+    const orc = orcadoPorGrupo[g]||0;
+    const real = realizadoPorGrupo[g]||0;
+    const dif = real - orc;
+    const pct = orc!==0 ? (dif/orc*100) : (real!==0 ? 100 : 0);
+    const cor = dif===0 ? 'var(--ink)' : (dif>0 ? 'var(--danger)' : 'var(--ok)');
+    return `<tr>
+      <td>${g}</td>
+      <td>${moeda(orc)}</td>
+      <td>${moeda(real)}</td>
+      <td style="color:${cor}">${moeda(dif)}</td>
+      <td style="color:${cor}">${orc!==0 ? pct.toFixed(1)+'%' : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  const linhasPorConta = (orcamentoContas||[]).map(conta=>{
+    const orcMensal = parseFloat(String(conta.orcado||'0').replace(/[^\d.,-]/g,'').replace(',','.')) || 0;
+    const orc = orcMensal * meses;
+    const real = pagar.filter(c=>c.plano_conta_id===conta.id).reduce((s,c)=>s+Number(c.valor),0);
+    const dif = real - orc;
+    const cor = dif===0 ? 'var(--ink)' : (dif>0 ? 'var(--danger)' : 'var(--ok)');
+    return `<tr>
+      <td>${escapeHtml(conta.conta||'(sem nome)')}</td>
+      <td>${escapeHtml(conta.tipo||'')}</td>
+      <td>${moeda(orcMensal)}</td>
+      <td>${moeda(orc)}</td>
+      <td>${moeda(real)}</td>
+      <td style="color:${cor}">${moeda(dif)}</td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="secao ativa">
+    <h2>Orçado x Realizado</h2>
+    <p class="desc">Orçado vem do Plano de Contas (módulo Planejamento — valor mensal). Realizado é o pago/recebido e <b>confirmado</b> no período selecionado (${formatarDataBR(periodoDRE.inicio)} a ${formatarDataBR(periodoDRE.fim)} — ${meses} mês${meses>1?'es':''}). O orçado é multiplicado automaticamente pelo número de meses do período, então dá pra comparar mensal, trimestral, semestral ou anual sem ajustar nada na mão.</p>
+
+    <div class="cartao">
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+        <button class="btn btn-ghost btn-sm" onclick="definirPeriodoRapido('mes')">Este mês</button>
+        <button class="btn btn-ghost btn-sm" onclick="definirPeriodoRapido('trimestre')">Este trimestre</button>
+        <button class="btn btn-ghost btn-sm" onclick="definirPeriodoRapido('semestre')">Este semestre</button>
+        <button class="btn btn-ghost btn-sm" onclick="definirPeriodoRapido('ano')">Este ano</button>
+      </div>
+      <div class="form-linha">
+        <div class="campo"><label>De</label><input type="date" id="dre-inicio" value="${periodoDRE.inicio}"></div>
+        <div class="campo"><label>Até</label><input type="date" id="dre-fim" value="${periodoDRE.fim}"></div>
+        <div class="campo" style="align-self:end;"><button class="btn btn-sm" onclick="atualizarPeriodoDRE()">Atualizar período</button></div>
+      </div>
+    </div>
+
+    <div class="cartao">
+      <h3>Por grupo (DRE)</h3>
+      <div style="overflow-x:auto;">
+        <table class="dyn">
+          <thead><tr><th>Grupo</th><th>Orçado (período)</th><th>Realizado</th><th>Diferença</th><th>% vs. orçado</th></tr></thead>
+          <tbody>${linhas}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="cartao">
+      <h3>Por conta do plano de contas</h3>
+      <div style="overflow-x:auto;">
+        <table class="dyn">
+          <thead><tr><th>Conta</th><th>Grupo</th><th>Orçado (mensal)</th><th>Orçado (período)</th><th>Realizado</th><th>Diferença</th></tr></thead>
+          <tbody>${linhasPorConta || `<tr><td colspan="6" style="color:var(--muted); padding:12px 8px;">Nenhuma conta no plano de contas ainda.</td></tr>`}</tbody>
+        </table>
+      </div>
+      ${(!orcamentoContas || orcamentoContas.length===0) ? '<p style="color:var(--muted); font-size:13px; margin-top:10px;">Nenhum orçamento cadastrado ainda no Planejamento → Orçamento (Plano de Contas).</p>' : ''}
+    </div>
+  </div>`;
+}
+
+/* ================= PLANEJAMENTO SEMANAL (A PAGAR + A RECEBER) ================= */
+function viewSemanal(){
+  const { inicio, fim } = rangeSemana(filtroSemanal.semanaRef);
+
+  const receberSemana = contasReceber.filter(c=> c.vencimento && c.vencimento>=inicio && c.vencimento<=fim);
+  const pagarSemana = contasPagar.filter(c=> c.vencimento && c.vencimento>=inicio && c.vencimento<=fim);
+
+  const totalReceber = receberSemana.reduce((s,c)=>s+Number(c.valor),0);
+  const totalPagar = pagarSemana.reduce((s,c)=>s+Number(c.valor),0);
+  const saldoSemana = totalReceber - totalPagar;
+
+  const linhaReceber = c => `<tr>
+    <td>${c.vencimento}</td><td>Receber</td><td>${escapeHtml(c.cliente||'')}</td>
+    <td>${escapeHtml(c.descricao||'')}</td><td>${moeda(c.valor)}</td>
+    <td>${badgeStatus(statusConta(c,'receber'))}</td></tr>`;
+  const linhaPagar = c => `<tr>
+    <td>${c.vencimento}</td><td>Pagar</td><td>${escapeHtml(c.fornecedor||'')}</td>
+    <td>${escapeHtml(c.descricao||'')} ${c.confirmado ? '' : '<span class="badge badge-pendente">Previsto</span>'}</td>
+    <td>${moeda(c.valor)}</td><td>${badgeStatus(statusConta(c,'pagar'))}</td></tr>`;
+
+  let tabelaHtml = '';
+  if(filtroSemanal.modo==='ambos'){
+    const combinadas = [...receberSemana.map(c=>({...c,_tipo:'receber'})), ...pagarSemana.map(c=>({...c,_tipo:'pagar'}))]
+      .sort((a,b)=> (a.vencimento||'').localeCompare(b.vencimento||''));
+    const linhas = combinadas.map(c=> c._tipo==='receber' ? linhaReceber(c) : linhaPagar(c)).join('');
+    tabelaHtml = `<div class="cartao"><h3>A receber e a pagar da semana</h3>
+      <div style="overflow-x:auto;"><table class="dyn">
+        <thead><tr><th>Vencimento</th><th>Tipo</th><th>Cliente/Fornecedor</th><th>Descrição</th><th>Valor</th><th>Status</th></tr></thead>
+        <tbody>${linhas || `<tr><td colspan="6" style="color:var(--muted); padding:14px 8px;">Nada nessa semana.</td></tr>`}</tbody>
+      </table></div></div>`;
+  } else if(filtroSemanal.modo==='receber'){
+    tabelaHtml = `<div class="cartao"><h3>A receber da semana</h3>
+      <div style="overflow-x:auto;"><table class="dyn">
+        <thead><tr><th>Vencimento</th><th>Tipo</th><th>Cliente</th><th>Descrição</th><th>Valor</th><th>Status</th></tr></thead>
+        <tbody>${receberSemana.map(linhaReceber).join('') || `<tr><td colspan="6" style="color:var(--muted); padding:14px 8px;">Nada a receber nessa semana.</td></tr>`}</tbody>
+      </table></div></div>`;
+  } else {
+    tabelaHtml = `<div class="cartao"><h3>A pagar da semana</h3>
+      <div style="overflow-x:auto;"><table class="dyn">
+        <thead><tr><th>Vencimento</th><th>Tipo</th><th>Fornecedor</th><th>Descrição</th><th>Valor</th><th>Status</th></tr></thead>
+        <tbody>${pagarSemana.map(linhaPagar).join('') || `<tr><td colspan="6" style="color:var(--muted); padding:14px 8px;">Nada a pagar nessa semana.</td></tr>`}</tbody>
+      </table></div></div>`;
+  }
+
+  return `<div class="secao ativa">
+    <h2>Planejamento Semanal</h2>
+    <p class="desc">Semana de segunda a domingo — o que entra e o que sai, junto ou separado.</p>
+
+    <div class="cartao">
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" onclick="navegarSemanaGeral(-7)">← Semana anterior</button>
+        <strong>${formatarDataBR(inicio)} a ${formatarDataBR(fim)}</strong>
+        <button class="btn btn-ghost btn-sm" onclick="navegarSemanaGeral(7)">Semana seguinte →</button>
+        <select id="semanal-modo" onchange="mudarModoSemanal(this.value)" style="margin-left:auto;">
+          <option value="ambos" ${filtroSemanal.modo==='ambos'?'selected':''}>Ver os dois juntos</option>
+          <option value="receber" ${filtroSemanal.modo==='receber'?'selected':''}>Só a receber</option>
+          <option value="pagar" ${filtroSemanal.modo==='pagar'?'selected':''}>Só a pagar</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi pos"><div class="label">Total a receber na semana</div><div class="valor">${moeda(totalReceber)}</div></div>
+      <div class="kpi neg"><div class="label">Total a pagar na semana</div><div class="valor">${moeda(totalPagar)}</div></div>
+      <div class="kpi ${saldoSemana>=0?'pos':'neg'}"><div class="label">Saldo líquido da semana</div><div class="valor">${moeda(saldoSemana)}</div></div>
+    </div>
+
+    ${tabelaHtml}
+  </div>`;
+}
+
+function navegarSemanaGeral(deltaDias){
+  const d = new Date(filtroSemanal.semanaRef + 'T00:00:00');
+  d.setDate(d.getDate() + deltaDias);
+  filtroSemanal.semanaRef = formatarISO(d);
+  renderAba('semanal');
+}
+function mudarModoSemanal(valor){
+  filtroSemanal.modo = valor;
+  renderAba('semanal');
+}
+
+function ativarHandlers(){ /* reservado */ }
+</script>
+</body>
+</html>
