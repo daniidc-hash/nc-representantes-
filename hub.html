@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NC | Portal</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --navy:#152238; --navy-2:#1e3050;
+    --cream:#F5EFE4; --cream-2:#EDE4D3;
+    --bordeaux:#7A2E3A; --bordeaux-2:#5E212B;
+    --gold:#C9A227; --ink:#2B2420; --muted:#8A8072; --danger:#B23A3A;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:'Georgia','Times New Roman',serif; background:var(--navy); color:var(--ink); min-height:100vh;}
+
+  #tela-login{min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(circle at 30% 20%, var(--navy-2), var(--navy) 70%);}
+  .caixa-login{background:var(--cream); padding:44px 36px; border-radius:6px; width:100%; max-width:360px;
+    box-shadow:0 20px 60px rgba(0,0,0,.35); text-align:center;}
+  .marca-nc{display:inline-block; background:var(--bordeaux); color:var(--cream); font-weight:bold;
+    letter-spacing:2px; padding:6px 18px; border-radius:4px; font-size:14px; margin-bottom:18px;}
+  .caixa-login h1{font-size:20px; margin:0 0 6px;}
+  .caixa-login p.sub{color:var(--muted); font-size:13px; margin:0 0 20px;}
+  input{font-family:'Georgia',serif; padding:10px 11px; border:1px solid #D8CDB8; border-radius:4px;
+    background:#fff; color:var(--ink); font-size:14px; width:100%;}
+  .campo-login{margin-bottom:12px; text-align:left;}
+  .campo-login label{display:block; font-size:12.5px; color:var(--muted); margin-bottom:4px;}
+  .btn{display:inline-block; background:var(--bordeaux); color:var(--cream); border:none; padding:11px 20px;
+    border-radius:4px; font-family:'Georgia',serif; font-size:14px; cursor:pointer; width:100%; margin-top:6px;}
+  .btn:hover{background:var(--bordeaux-2);}
+  #login-erro{color:var(--danger); font-size:13px; margin-top:10px; min-height:16px;}
+
+  #app{display:none; min-height:100vh;}
+  header.topo{background:var(--navy); color:var(--cream); padding:18px 28px; display:flex;
+    align-items:center; justify-content:space-between; border-bottom:3px solid var(--gold);}
+  header.topo h1{font-size:18px; margin:0; font-weight:normal;}
+  .sair{color:var(--cream); text-decoration:none; font-size:13px; border:1px solid rgba(245,239,228,.4);
+    padding:6px 12px; border-radius:4px; cursor:pointer; background:none; font-family:'Georgia',serif;}
+  .sair:hover{background:rgba(245,239,228,.1);}
+
+  main{max-width:900px; margin:0 auto; padding:50px 24px;}
+  main .boas-vindas{color:var(--cream); font-size:15px; margin-bottom:30px;}
+  .grade{display:grid; grid-template-columns:repeat(auto-fit, minmax(220px,1fr)); gap:20px;}
+  .cartao-modulo{
+    background:var(--cream); border-radius:8px; padding:28px 24px; text-decoration:none; color:var(--ink);
+    box-shadow:0 10px 30px rgba(0,0,0,.2); transition:transform .15s ease;
+    display:block; border-top:4px solid var(--gold);
+  }
+  .cartao-modulo:hover{transform:translateY(-3px);}
+  .cartao-modulo h2{font-size:19px; margin:0 0 8px; color:var(--bordeaux);}
+  .cartao-modulo p{font-size:13.5px; color:var(--muted); margin:0;}
+  .sem-acesso{color:var(--cream); opacity:.6; font-size:14px; margin-top:30px;}
+
+  .secao-admin{background:var(--cream); border-radius:8px; padding:26px 24px; margin-top:40px;}
+  .secao-admin h2{font-size:18px; color:var(--bordeaux); margin:0 0 16px;}
+  .form-linha{display:grid; grid-template-columns:repeat(auto-fit, minmax(140px,1fr)); gap:10px; margin-bottom:12px;}
+  .form-linha .campo label{display:block; font-size:11.5px; color:var(--muted); margin-bottom:4px; text-transform:uppercase;}
+  .form-linha input, .form-linha select{width:100%; font-family:'Georgia',serif; padding:9px 10px; border:1px solid #D8CDB8; border-radius:4px; font-size:13.5px;}
+  .btn-sm{padding:8px 16px; font-size:13px; width:auto;}
+  table.dyn{width:100%; border-collapse:collapse; font-size:13.5px; margin-top:16px;}
+  table.dyn th{text-align:left; font-size:11.5px; color:var(--muted); text-transform:uppercase; padding:8px; border-bottom:2px solid #E7DFCC;}
+  table.dyn td{padding:8px; border-bottom:1px solid #F0EAD9;}
+  .msg{font-size:12.5px; margin-left:10px;}
+  .msg.ok{color:#4C7A4C;} .msg.erro{color:var(--danger);}
+</style>
+</head>
+<body>
+
+<div id="tela-login">
+  <div class="caixa-login">
+    <span class="marca-nc">NC</span>
+    <h1>Portal NC</h1>
+    <p class="sub">Entre com seu e-mail e senha de acesso</p>
+    <div class="campo-login">
+      <label>E-mail</label>
+      <input type="email" id="email-input" placeholder="seuemail@exemplo.com">
+    </div>
+    <div class="campo-login">
+      <label>Senha</label>
+      <input type="password" id="senha-input" placeholder="Senha">
+    </div>
+    <button class="btn" onclick="fazerLogin()">Entrar</button>
+    <div id="login-erro"></div>
+  </div>
+</div>
+
+<div id="app">
+  <header class="topo">
+    <h1>NC · Portal</h1>
+    <button class="sair" onclick="sair()">Sair</button>
+  </header>
+  <main>
+    <p class="boas-vindas" id="boas-vindas"></p>
+    <div class="grade" id="grade-modulos"></div>
+    <p class="sem-acesso" id="sem-acesso" style="display:none;">Você ainda não tem nenhum módulo liberado. Fale com a gestão para liberar seu acesso.</p>
+
+    <div class="secao-admin" id="secao-admin" style="display:none;">
+      <h2>Gerenciar Acessos</h2>
+
+      <div class="form-linha">
+        <div class="campo"><label>Nome</label><input type="text" id="novo-nome"></div>
+        <div class="campo"><label>E-mail</label><input type="email" id="novo-email"></div>
+        <div class="campo"><label>Senha temporária</label><input type="text" id="novo-senha" placeholder="a pessoa pode trocar depois"></div>
+        <div class="campo"><label>Papel</label>
+          <select id="novo-role">
+            <option value="gestora">Gestora (vê tudo)</option>
+            <option value="financeiro">Financeiro</option>
+            <option value="vendedor">Vendedor</option>
+            <option value="representante">Representante</option>
+          </select>
+        </div>
+        <div class="campo" style="align-self:end;">
+          <button class="btn btn-sm" onclick="criarAcesso()">Criar acesso</button>
+        </div>
+      </div>
+      <span class="msg" id="msg-criar-acesso"></span>
+
+      <table class="dyn" id="tabela-perfis">
+        <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Ativo</th><th></th></tr></thead>
+        <tbody id="corpo-tabela-perfis"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script>
+const SUPABASE_URL = "https://svnkkwwrwofctkbkylzg.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_ExyC0p_fHCNSSxZ94bQ8kQ_GuNqcJBD";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* Define quais módulos cada papel (role) enxerga.
+   Ajuste aqui conforme forem criando novos perfis. */
+const PERMISSOES_POR_ROLE = {
+  gestora:     { sistema:true,  financeiro:true,  planejamento:true },
+  financeiro:  { sistema:false, financeiro:true,  planejamento:false },
+  vendedor:    { sistema:true,  financeiro:false, planejamento:false },
+  representante: { sistema:true, financeiro:false, planejamento:false },
+};
+
+const MODULOS = [
+  { chave:'sistema',      titulo:'Sistema Comercial', desc:'Pedidos, clientes, estoque e agenda de visitas.', href:'index.html' },
+  { chave:'financeiro',   titulo:'Financeiro', desc:'Contas a pagar, a receber, DRE e conciliação bancária.', href:'financeiro.html' },
+  { chave:'planejamento', titulo:'Planejamento Estratégico', desc:'Cascata estratégica, metas, indicadores e plano de ação.', href:'planejamento.html' },
+];
+
+async function fazerLogin(){
+  const email = document.getElementById('email-input').value.trim();
+  const senha = document.getElementById('senha-input').value;
+  const erroEl = document.getElementById('login-erro');
+  erroEl.textContent = '';
+  if(!email || !senha){ erroEl.textContent = 'Preencha e-mail e senha.'; return; }
+
+  const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
+  if(error){ erroEl.textContent = 'E-mail ou senha incorretos.'; return; }
+  await iniciarApp();
+}
+
+async function sair(){
+  await supabase.auth.signOut();
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('tela-login').style.display = 'flex';
+}
+
+async function iniciarApp(){
+  const { data: { session } } = await supabase.auth.getSession();
+  if(!session){ return; }
+
+  const { data: perfil, error } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+  if(error || !perfil){
+    document.getElementById('login-erro').textContent = 'Login ok, mas não encontramos seu perfil. Fale com a gestão.';
+    return;
+  }
+
+  document.getElementById('tela-login').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('boas-vindas').textContent = `Olá, ${perfil.nome || perfil.email}!`;
+
+  const permissoes = PERMISSOES_POR_ROLE[perfil.role] || {};
+  const grade = document.getElementById('grade-modulos');
+  grade.innerHTML = '';
+  let algumModulo = false;
+
+  MODULOS.forEach(m=>{
+    if(permissoes[m.chave]){
+      algumModulo = true;
+      const a = document.createElement('a');
+      a.className = 'cartao-modulo';
+      a.href = m.href;
+      a.innerHTML = `<h2>${m.titulo}</h2><p>${m.desc}</p>`;
+      grade.appendChild(a);
+    }
+  });
+
+  document.getElementById('sem-acesso').style.display = algumModulo ? 'none' : 'block';
+
+  if(perfil.role === 'gestora'){
+    document.getElementById('secao-admin').style.display = 'block';
+    await carregarPerfis();
+  }
+}
+
+async function carregarPerfis(){
+  const { data, error } = await supabase.from('profiles').select('*').order('nome', {ascending:true});
+  if(error){ console.error(error); return; }
+  const corpo = document.getElementById('corpo-tabela-perfis');
+  corpo.innerHTML = (data||[]).map(p=>`
+    <tr>
+      <td>${escapeHtml(p.nome||'')}</td>
+      <td>${escapeHtml(p.email||'')}</td>
+      <td>
+        <select id="role-${p.id}">
+          <option value="gestora" ${p.role==='gestora'?'selected':''}>Gestora</option>
+          <option value="financeiro" ${p.role==='financeiro'?'selected':''}>Financeiro</option>
+          <option value="vendedor" ${p.role==='vendedor'?'selected':''}>Vendedor</option>
+          <option value="representante" ${p.role==='representante'?'selected':''}>Representante</option>
+        </select>
+      </td>
+      <td>
+        <input type="checkbox" id="ativo-${p.id}" ${p.ativo ? 'checked' : ''}>
+      </td>
+      <td><button class="btn btn-sm" onclick="salvarPerfil('${p.id}')">Salvar</button> <span class="msg" id="msg-perfil-${p.id}"></span></td>
+    </tr>
+  `).join('');
+}
+
+async function salvarPerfil(id){
+  const role = document.getElementById(`role-${id}`).value;
+  const ativo = document.getElementById(`ativo-${id}`).checked;
+  const { error } = await supabase.from('profiles').update({ role, ativo }).eq('id', id);
+  const msg = document.getElementById(`msg-perfil-${id}`);
+  if(error){ msg.textContent = 'Erro'; msg.className='msg erro'; console.error(error); return; }
+  msg.textContent = 'Salvo ✓'; msg.className='msg ok';
+}
+
+async function criarAcesso(){
+  const nome = document.getElementById('novo-nome').value.trim();
+  const email = document.getElementById('novo-email').value.trim();
+  const senha = document.getElementById('novo-senha').value;
+  const role = document.getElementById('novo-role').value;
+  const msg = document.getElementById('msg-criar-acesso');
+  msg.textContent = ''; msg.className = 'msg';
+
+  if(!nome || !email || !senha){ msg.textContent = 'Preencha nome, e-mail e senha.'; msg.className='msg erro'; return; }
+  if(senha.length < 6){ msg.textContent = 'Senha precisa ter ao menos 6 caracteres.'; msg.className='msg erro'; return; }
+
+  const { data: { session } } = await supabase.auth.getSession();
+  msg.textContent = 'Criando...';
+
+  try{
+    const resp = await fetch(`${SUPABASE_URL}/functions/v1/criar-usuario`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ nome, email, senha, role }),
+    });
+    const resultado = await resp.json();
+    if(!resp.ok || resultado.error){
+      msg.textContent = resultado.error || 'Erro ao criar acesso.';
+      msg.className = 'msg erro';
+      return;
+    }
+    msg.textContent = 'Acesso criado ✓';
+    msg.className = 'msg ok';
+    document.getElementById('novo-nome').value = '';
+    document.getElementById('novo-email').value = '';
+    document.getElementById('novo-senha').value = '';
+    await carregarPerfis();
+  } catch(e){
+    msg.textContent = 'Erro de conexão ao criar acesso.';
+    msg.className = 'msg erro';
+    console.error(e);
+  }
+}
+
+function escapeHtml(s){ return String(s??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+window.addEventListener('DOMContentLoaded', async ()=>{
+  const { data: { session } } = await supabase.auth.getSession();
+  if(session){ await iniciarApp(); }
+});
+
+document.getElementById('senha-input').addEventListener('keydown', e=>{ if(e.key==='Enter') fazerLogin(); });
+</script>
+</body>
+</html>
