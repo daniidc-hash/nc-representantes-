@@ -126,9 +126,9 @@
 </div>
 
 <script>
-const SUPABASE_URL = "https://wnnpmbgytuxyzonkmlyp.supabase.co";
+const SUPABASE_URL = "https://wnnpmbgytuxyzonkmlyp.supabaseClient.co";
 const SUPABASE_ANON_KEY = "sb_publishable_wlkj9arKt8rtySgbwEtIxw_ETQCi-Ta";
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* Define quais módulos cada papel (role) enxerga.
    Ajuste aqui conforme forem criando novos perfis. */
@@ -152,22 +152,22 @@ async function fazerLogin(){
   erroEl.textContent = '';
   if(!email || !senha){ erroEl.textContent = 'Preencha e-mail e senha.'; return; }
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
+  const { error } = await supabaseClient.auth.signInWithPassword({ email, password: senha });
   if(error){ erroEl.textContent = 'E-mail ou senha incorretos.'; return; }
   await iniciarApp();
 }
 
 async function sair(){
-  await supabase.auth.signOut();
+  await supabaseClient.auth.signOut();
   document.getElementById('app').style.display = 'none';
   document.getElementById('tela-login').style.display = 'flex';
 }
 
 async function iniciarApp(){
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await supabaseClient.auth.getSession();
   if(!session){ return; }
 
-  const { data: perfil, error } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+  const { data: perfil, error } = await supabaseClient.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
   if(error || !perfil){
     document.getElementById('login-erro').textContent = 'Login ok, mas não encontramos seu perfil. Fale com a gestão.';
     return;
@@ -202,7 +202,7 @@ async function iniciarApp(){
 }
 
 async function carregarPerfis(){
-  const { data, error } = await supabase.from('profiles').select('*').order('nome', {ascending:true});
+  const { data, error } = await supabaseClient.from('profiles').select('*').order('nome', {ascending:true});
   if(error){ console.error(error); return; }
   const corpo = document.getElementById('corpo-tabela-perfis');
   corpo.innerHTML = (data||[]).map(p=>`
@@ -232,7 +232,7 @@ async function carregarPerfis(){
 async function salvarPerfil(id){
   const role = document.getElementById(`role-${id}`).value;
   const ativo = document.getElementById(`ativo-${id}`).checked;
-  const { error } = await supabase.from('profiles').update({ role, ativo }).eq('id', id);
+  const { error } = await supabaseClient.from('profiles').update({ role, ativo }).eq('id', id);
   const msg = document.getElementById(`msg-perfil-${id}`);
   if(error){ msg.textContent = 'Erro'; msg.className='msg erro'; console.error(error); return; }
   msg.textContent = 'Salvo ✓'; msg.className='msg ok';
@@ -249,7 +249,7 @@ async function criarAcesso(){
   if(!nome || !email || !senha){ msg.textContent = 'Preencha nome, e-mail e senha.'; msg.className='msg erro'; return; }
   if(senha.length < 6){ msg.textContent = 'Senha precisa ter ao menos 6 caracteres.'; msg.className='msg erro'; return; }
 
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await supabaseClient.auth.getSession();
   msg.textContent = 'Criando...';
 
   try{
@@ -289,7 +289,7 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   document.getElementById('btn-criar-acesso').addEventListener('click', criarAcesso);
   document.getElementById('senha-input').addEventListener('keydown', e=>{ if(e.key==='Enter') fazerLogin(); });
 
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await supabaseClient.auth.getSession();
   if(session){ await iniciarApp(); }
 });
 </script>
