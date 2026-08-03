@@ -251,9 +251,9 @@
    Copie as mesmas duas linhas que já estão no seu index.html
    (Project URL e anon key) — é o mesmo banco de dados.
 ========================================================= */
-const SUPABASE_URL = "https://wnnpmbgytuxyzonkmlyp.supabase.co";
+const SUPABASE_URL = "https://wnnpmbgytuxyzonkmlyp.supabaseClient.co";
 const SUPABASE_ANON_KEY = "sb_publishable_wlkj9arKt8rtySgbwEtIxw_ETQCi-Ta";
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const PERMISSOES_POR_ROLE = {
   gestora:        { sistema:true,  financeiro:true,  planejamento:true },
@@ -263,12 +263,12 @@ const PERMISSOES_POR_ROLE = {
 };
 
 async function checarAcessoEIniciar(){
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await supabaseClient.auth.getSession();
   if(!session){
     window.location.href = 'hub.html';
     return;
   }
-  const { data: perfil, error } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+  const { data: perfil, error } = await supabaseClient.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
   if(error || !perfil){
     document.getElementById('login-erro').textContent = 'Não encontramos seu perfil. Fale com a gestão.';
     return;
@@ -282,7 +282,7 @@ async function checarAcessoEIniciar(){
 }
 
 async function sairDoModulo(){
-  await supabase.auth.signOut();
+  await supabaseClient.auth.signOut();
   window.location.href = 'hub.html';
 }
 
@@ -567,7 +567,7 @@ function montarSidebar(){
 ========================================================= */
 async function carregarDados(){
   document.getElementById('status-save').textContent = 'Carregando...';
-  const { data, error } = await supabase.from('planejamento').select('secao, dados');
+  const { data, error } = await supabaseClient.from('planejamento').select('secao, dados');
   if(error){
     console.error(error);
     document.getElementById('status-save').textContent = 'Erro ao carregar';
@@ -580,7 +580,7 @@ async function carregarDados(){
 
 async function salvarSecao(secaoId){
   const botao = document.getElementById('msg-' + secaoId);
-  const { error } = await supabase.from('planejamento').upsert({
+  const { error } = await supabaseClient.from('planejamento').upsert({
     secao: secaoId,
     dados: estado[secaoId] || {},
     atualizado_em: new Date().toISOString()
