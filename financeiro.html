@@ -123,17 +123,9 @@
   <div class="caixa-login">
     <span class="marca-nc">NC</span>
     <h1>Financeiro</h1>
-    <p class="sub">Contas a pagar, a receber e conciliação bancária</p>
-    <div class="campo-login">
-      <label>Seu nome (aparece nos lançamentos)</label>
-      <input type="text" id="nome-input" placeholder="Ex: Dani" />
-    </div>
-    <div class="campo-login">
-      <label>Senha</label>
-      <input type="password" id="senha-input" placeholder="Senha" />
-    </div>
-    <button class="btn" onclick="tentarLogin()">Entrar</button>
+    <p class="sub">Verificando seu acesso...</p>
     <div id="login-erro"></div>
+    <a href="hub.html" class="btn" style="text-decoration:none; display:inline-block;">Ir para o Portal</a>
   </div>
 </div>
 
@@ -142,8 +134,10 @@
     <h1>NC · Financeiro</h1>
     <div style="display:flex; align-items:center; gap:16px;">
       <span id="quem-lancou"></span>
-      <a class="voltar" href="index.html">← Sistema</a>
+      <a class="voltar" href="hub.html">← Portal</a>
+      <a class="voltar" href="index.html">Sistema</a>
       <a class="voltar" href="planejamento.html">Planejamento</a>
+      <button class="voltar" style="cursor:pointer;" onclick="sairDoModulo()">Sair</button>
     </div>
   </header>
   <div class="layout">
@@ -154,29 +148,47 @@
 
 <script>
 /* ================= CONFIG SUPABASE ================= */
-const SUPABASE_URL = "https://svnkkwwrwofctkbkylzg.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_ExyC0p_fHCNSSxZ94bQ8kQ_GuNqcJBD";
+const SUPABASE_URL = "https://wnnpmbgytuxyzonkmlyp.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_wlkj9arKt8rtySgbwEtIxw_ETQCi-Ta";
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const SENHA_ACESSO = "Nc@2026Suce$$o"; // pode trocar por uma senha própria do financeiro
+/* Login agora é feito pelo Portal (hub.html), usando Supabase Auth de verdade. */
+
+const PERMISSOES_POR_ROLE = {
+  gestora:        { sistema:true,  financeiro:true,  planejamento:true },
+  financeiro:     { sistema:false, financeiro:true,  planejamento:false },
+  vendedor:       { sistema:true,  financeiro:false, planejamento:false },
+  representante:  { sistema:true,  financeiro:false, planejamento:false },
+};
 
 let usuarioAtual = "";
 
-function tentarLogin(){
-  const senha = document.getElementById('senha-input').value;
-  const nome = document.getElementById('nome-input').value.trim();
-  if(!nome){ document.getElementById('login-erro').textContent = "Informe seu nome."; return; }
-  if(senha !== SENHA_ACESSO){ document.getElementById('login-erro').textContent = "Senha incorreta."; return; }
-  usuarioAtual = nome;
-  sessionStorage.setItem('nc_financeiro_nome', nome);
+async function checarAcessoEIniciar(){
+  const { data: { session } } = await supabase.auth.getSession();
+  if(!session){
+    window.location.href = 'hub.html';
+    return;
+  }
+  const { data: perfil, error } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+  if(error || !perfil){
+    document.getElementById('login-erro').textContent = 'Não encontramos seu perfil. Fale com a gestão.';
+    return;
+  }
+  const permissoes = PERMISSOES_POR_ROLE[perfil.role] || {};
+  if(!permissoes.financeiro){
+    document.getElementById('login-erro').textContent = 'Seu perfil não tem acesso ao Financeiro.';
+    return;
+  }
+  usuarioAtual = perfil.nome || perfil.email;
   iniciarApp();
 }
-document.getElementById('senha-input').addEventListener('keydown', e=>{ if(e.key==='Enter') tentarLogin(); });
 
-window.addEventListener('DOMContentLoaded', ()=>{
-  const nomeSalvo = sessionStorage.getItem('nc_financeiro_nome');
-  if(nomeSalvo){ usuarioAtual = nomeSalvo; iniciarApp(); }
-});
+window.addEventListener('DOMContentLoaded', checarAcessoEIniciar);
+
+async function sairDoModulo(){
+  await supabase.auth.signOut();
+  window.location.href = 'hub.html';
+}
 
 /* ================= DADOS EM MEMÓRIA ================= */
 let contasPagar = [];
