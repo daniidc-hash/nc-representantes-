@@ -148,9 +148,9 @@
 
 <script>
 /* ================= CONFIG SUPABASE ================= */
-const SUPABASE_URL = "https://wnnpmbgytuxyzonkmlyp.supabase.co";
+const SUPABASE_URL = "https://wnnpmbgytuxyzonkmlyp.supabaseClient.co";
 const SUPABASE_ANON_KEY = "sb_publishable_wlkj9arKt8rtySgbwEtIxw_ETQCi-Ta";
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* Login agora é feito pelo Portal (hub.html), usando Supabase Auth de verdade. */
 
@@ -164,12 +164,12 @@ const PERMISSOES_POR_ROLE = {
 let usuarioAtual = "";
 
 async function checarAcessoEIniciar(){
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await supabaseClient.auth.getSession();
   if(!session){
     window.location.href = 'hub.html';
     return;
   }
-  const { data: perfil, error } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+  const { data: perfil, error } = await supabaseClient.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
   if(error || !perfil){
     document.getElementById('login-erro').textContent = 'Não encontramos seu perfil. Fale com a gestão.';
     return;
@@ -186,7 +186,7 @@ async function checarAcessoEIniciar(){
 window.addEventListener('DOMContentLoaded', checarAcessoEIniciar);
 
 async function sairDoModulo(){
-  await supabase.auth.signOut();
+  await supabaseClient.auth.signOut();
   window.location.href = 'hub.html';
 }
 
@@ -247,12 +247,12 @@ let bancos = [];
 
 async function carregarTudo(){
   const [p, r, e, cfg, orc, bcs] = await Promise.all([
-    supabase.from('contas_pagar').select('*').order('vencimento', {ascending:true}),
-    supabase.from('contas_receber').select('*').order('vencimento', {ascending:true}),
-    supabase.from('extrato_bancario').select('*').order('data', {ascending:true}),
-    supabase.from('financeiro_config').select('*').eq('chave','saldo_inicial').maybeSingle(),
-    supabase.from('planejamento').select('dados').eq('secao','orcamento').maybeSingle(),
-    supabase.from('bancos').select('*').order('nome', {ascending:true}),
+    supabaseClient.from('contas_pagar').select('*').order('vencimento', {ascending:true}),
+    supabaseClient.from('contas_receber').select('*').order('vencimento', {ascending:true}),
+    supabaseClient.from('extrato_bancario').select('*').order('data', {ascending:true}),
+    supabaseClient.from('financeiro_config').select('*').eq('chave','saldo_inicial').maybeSingle(),
+    supabaseClient.from('planejamento').select('dados').eq('secao','orcamento').maybeSingle(),
+    supabaseClient.from('bancos').select('*').order('nome', {ascending:true}),
   ]);
   contasPagar = p.data || [];
   contasReceber = r.data || [];
@@ -265,7 +265,7 @@ async function carregarTudo(){
 async function adicionarBancoRapido(){
   const nome = prompt('Nome do banco/conta:');
   if(!nome) return;
-  await supabase.from('bancos').insert({nome});
+  await supabaseClient.from('bancos').insert({nome});
   await carregarTudo();
   renderAba('pagar');
 }
@@ -362,7 +362,7 @@ function viewResumo(){
 
 async function salvarSaldoInicial(){
   const val = parseFloat(document.getElementById('input-saldo-inicial').value) || 0;
-  await supabase.from('financeiro_config').upsert({chave:'saldo_inicial', valor:{valor: val}}, {onConflict:'chave'});
+  await supabaseClient.from('financeiro_config').upsert({chave:'saldo_inicial', valor:{valor: val}}, {onConflict:'chave'});
   saldoInicial = val;
   renderAba('resumo');
 }
@@ -484,7 +484,7 @@ function celulaDocumentos(c){
 
 function urlArquivo(path){
   if(!path) return '#';
-  const { data } = supabase.storage.from('comprovantes-financeiro').getPublicUrl(path);
+  const { data } = supabaseClient.storage.from('comprovantes-financeiro').getPublicUrl(path);
   return data.publicUrl;
 }
 
@@ -492,10 +492,10 @@ async function anexarArquivo(contaId, tipoArquivo, inputEl){
   const file = inputEl.files[0];
   if(!file) return;
   const path = `contas-pagar/${contaId}/${tipoArquivo}-${Date.now()}-${file.name}`;
-  const { error: erroUpload } = await supabase.storage.from('comprovantes-financeiro').upload(path, file, {upsert:true});
+  const { error: erroUpload } = await supabaseClient.storage.from('comprovantes-financeiro').upload(path, file, {upsert:true});
   if(erroUpload){ alert('Erro ao enviar arquivo: ' + erroUpload.message); return; }
   const campo = tipoArquivo==='conta' ? 'arquivo_conta_path' : 'arquivo_comprovante_path';
-  const { error: erroUpdate } = await supabase.from('contas_pagar').update({[campo]: path}).eq('id', contaId);
+  const { error: erroUpdate } = await supabaseClient.from('contas_pagar').update({[campo]: path}).eq('id', contaId);
   if(erroUpdate){ alert('Arquivo enviado, mas houve erro ao vincular: ' + erroUpdate.message); return; }
   await carregarTudo();
   renderAba('pagar');
@@ -527,7 +527,7 @@ async function adicionarConta(tipo){
   }
   registro.origem = 'Manual';
   const tabela = tipo==='pagar' ? 'contas_pagar' : 'contas_receber';
-  const { error } = await supabase.from(tabela).insert(registro);
+  const { error } = await supabaseClient.from(tabela).insert(registro);
   const msg = document.getElementById(`msg-novo-${tipo}`);
   if(error){ msg.textContent='Erro ao salvar'; msg.className='msg ver erro'; console.error(error); return; }
   msg.textContent='Adicionado ✓'; msg.className='msg ver ok';
@@ -536,7 +536,7 @@ async function adicionarConta(tipo){
 }
 
 async function alternarConfirmado(id, novoValor){
-  await supabase.from('contas_pagar').update({confirmado: novoValor}).eq('id', id);
+  await supabaseClient.from('contas_pagar').update({confirmado: novoValor}).eq('id', id);
   await carregarTudo();
   renderAba('pagar');
 }
@@ -544,7 +544,7 @@ async function alternarConfirmado(id, novoValor){
 async function marcarComoQuitado(tipo, id){
   const tabela = tipo==='pagar' ? 'contas_pagar' : 'contas_receber';
   const campoData = tipo==='pagar' ? 'data_pagamento' : 'data_recebimento';
-  await supabase.from(tabela).update({[campoData]: hojeISO()}).eq('id', id);
+  await supabaseClient.from(tabela).update({[campoData]: hojeISO()}).eq('id', id);
   await carregarTudo();
   renderAba(tipo);
 }
@@ -552,7 +552,7 @@ async function marcarComoQuitado(tipo, id){
 async function removerConta(tipo, id){
   if(!confirm('Remover este lançamento?')) return;
   const tabela = tipo==='pagar' ? 'contas_pagar' : 'contas_receber';
-  await supabase.from(tabela).delete().eq('id', id);
+  await supabaseClient.from(tabela).delete().eq('id', id);
   await carregarTudo();
   renderAba(tipo);
 }
@@ -707,7 +707,7 @@ async function adicionarExtrato(){
     conciliado: false,
     lancado_por: usuarioAtual,
   };
-  const { error } = await supabase.from('extrato_bancario').insert(registro);
+  const { error } = await supabaseClient.from('extrato_bancario').insert(registro);
   const msg = document.getElementById('msg-extrato');
   if(error){ msg.textContent='Erro ao salvar'; msg.className='msg ver erro'; console.error(error); return; }
   msg.textContent='Adicionado ✓'; msg.className='msg ver ok';
@@ -716,14 +716,14 @@ async function adicionarExtrato(){
 }
 
 async function confirmarConciliacao(extratoId){
-  await supabase.from('extrato_bancario').update({conciliado:true}).eq('id', extratoId);
+  await supabaseClient.from('extrato_bancario').update({conciliado:true}).eq('id', extratoId);
   await carregarTudo();
   renderAba('conciliacao');
 }
 
 async function removerExtrato(id){
   if(!confirm('Remover este item do extrato?')) return;
-  await supabase.from('extrato_bancario').delete().eq('id', id);
+  await supabaseClient.from('extrato_bancario').delete().eq('id', id);
   await carregarTudo();
   renderAba('conciliacao');
 }
