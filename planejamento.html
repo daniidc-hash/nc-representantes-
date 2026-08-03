@@ -218,10 +218,9 @@
   <div class="caixa-login">
     <span class="marca-nc">NC</span>
     <h1>Planejamento Estratégico</h1>
-    <p class="sub">Acesso restrito à gestão</p>
-    <input type="password" id="senha-input" placeholder="Senha" />
-    <button class="btn" onclick="tentarLogin()">Entrar</button>
+    <p class="sub">Verificando seu acesso...</p>
     <div id="login-erro"></div>
+    <a href="hub.html" class="btn" style="text-decoration:none; display:inline-block;">Ir para o Portal</a>
   </div>
 </div>
 
@@ -233,7 +232,10 @@
     </div>
     <div style="display:flex; align-items:center; gap:16px;">
       <span id="status-save">—</span>
-      <a class="voltar" href="index.html">← Voltar ao sistema</a>
+      <a class="voltar" href="hub.html">← Portal</a>
+      <a class="voltar" href="index.html">Sistema</a>
+      <a class="voltar" href="financeiro.html">Financeiro</a>
+      <button class="voltar" style="cursor:pointer;" onclick="sairDoModulo()">Sair</button>
     </div>
   </header>
 
@@ -249,26 +251,40 @@
    Copie as mesmas duas linhas que já estão no seu index.html
    (Project URL e anon key) — é o mesmo banco de dados.
 ========================================================= */
-const SUPABASE_URL = "https://svnkkwwrwofctkbkylzg.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_ExyC0p_fHCNSSxZ94bQ8kQ_GuNqcJBD";
+const SUPABASE_URL = "https://wnnpmbgytuxyzonkmlyp.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_wlkj9arKt8rtySgbwEtIxw_ETQCi-Ta";
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-/* Senha de acesso — troque para a que preferir.
-   Pode ser a mesma senha do gestor do sistema principal. */
-const SENHA_ACESSO = "Nc@2026Suce$$o";
+const PERMISSOES_POR_ROLE = {
+  gestora:        { sistema:true,  financeiro:true,  planejamento:true },
+  financeiro:     { sistema:false, financeiro:true,  planejamento:false },
+  vendedor:       { sistema:true,  financeiro:false, planejamento:false },
+  representante:  { sistema:true,  financeiro:false, planejamento:false },
+};
 
-function tentarLogin(){
-  const val = document.getElementById('senha-input').value;
-  if(val === SENHA_ACESSO){
-    sessionStorage.setItem('nc_planejamento_ok','1');
-    iniciarApp();
-  } else {
-    document.getElementById('login-erro').textContent = "Senha incorreta.";
+async function checarAcessoEIniciar(){
+  const { data: { session } } = await supabase.auth.getSession();
+  if(!session){
+    window.location.href = 'hub.html';
+    return;
   }
+  const { data: perfil, error } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+  if(error || !perfil){
+    document.getElementById('login-erro').textContent = 'Não encontramos seu perfil. Fale com a gestão.';
+    return;
+  }
+  const permissoes = PERMISSOES_POR_ROLE[perfil.role] || {};
+  if(!permissoes.planejamento){
+    document.getElementById('login-erro').textContent = 'Seu perfil não tem acesso ao Planejamento.';
+    return;
+  }
+  iniciarApp();
 }
-document.getElementById('senha-input').addEventListener('keydown', e=>{
-  if(e.key === 'Enter') tentarLogin();
-});
+
+async function sairDoModulo(){
+  await supabase.auth.signOut();
+  window.location.href = 'hub.html';
+}
 
 /* =========================================================
    ESTRUTURA DAS SEÇÕES
@@ -524,11 +540,7 @@ async function iniciarApp(){
 }
 
 /* checa sessão ao carregar */
-window.addEventListener('DOMContentLoaded', ()=>{
-  if(sessionStorage.getItem('nc_planejamento_ok') === '1'){
-    iniciarApp();
-  }
-});
+window.addEventListener('DOMContentLoaded', checarAcessoEIniciar);
 
 function montarSidebar(){
   const nav = document.getElementById('nav-sidebar');
