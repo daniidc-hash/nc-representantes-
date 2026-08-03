@@ -81,7 +81,7 @@
       <label>Senha</label>
       <input type="password" id="senha-input" placeholder="Senha">
     </div>
-    <button class="btn" onclick="fazerLogin()">Entrar</button>
+    <button class="btn" id="btn-entrar">Entrar</button>
     <div id="login-erro"></div>
   </div>
 </div>
@@ -89,7 +89,7 @@
 <div id="app">
   <header class="topo">
     <h1>NC · Portal</h1>
-    <button class="sair" onclick="sair()">Sair</button>
+    <button class="sair" id="btn-sair">Sair</button>
   </header>
   <main>
     <p class="boas-vindas" id="boas-vindas"></p>
@@ -112,7 +112,7 @@
           </select>
         </div>
         <div class="campo" style="align-self:end;">
-          <button class="btn btn-sm" onclick="criarAcesso()">Criar acesso</button>
+          <button class="btn btn-sm" id="btn-criar-acesso">Criar acesso</button>
         </div>
       </div>
       <span class="msg" id="msg-criar-acesso"></span>
@@ -220,9 +220,13 @@ async function carregarPerfis(){
       <td>
         <input type="checkbox" id="ativo-${p.id}" ${p.ativo ? 'checked' : ''}>
       </td>
-      <td><button class="btn btn-sm" onclick="salvarPerfil('${p.id}')">Salvar</button> <span class="msg" id="msg-perfil-${p.id}"></span></td>
+      <td><button class="btn btn-sm btn-salvar-perfil" data-id="${p.id}">Salvar</button> <span class="msg" id="msg-perfil-${p.id}"></span></td>
     </tr>
   `).join('');
+
+  document.querySelectorAll('.btn-salvar-perfil').forEach(btn=>{
+    btn.addEventListener('click', ()=> salvarPerfil(btn.dataset.id));
+  });
 }
 
 async function salvarPerfil(id){
@@ -280,11 +284,14 @@ async function criarAcesso(){
 function escapeHtml(s){ return String(s??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
 window.addEventListener('DOMContentLoaded', async ()=>{
+  document.getElementById('btn-entrar').addEventListener('click', fazerLogin);
+  document.getElementById('btn-sair').addEventListener('click', sair);
+  document.getElementById('btn-criar-acesso').addEventListener('click', criarAcesso);
+  document.getElementById('senha-input').addEventListener('keydown', e=>{ if(e.key==='Enter') fazerLogin(); });
+
   const { data: { session } } = await supabase.auth.getSession();
   if(session){ await iniciarApp(); }
 });
-
-document.getElementById('senha-input').addEventListener('keydown', e=>{ if(e.key==='Enter') fazerLogin(); });
 </script>
 </body>
 </html>
