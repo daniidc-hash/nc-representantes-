@@ -209,6 +209,17 @@
     .grid-2{grid-template-columns:1fr;}
     main.conteudo{padding:20px 16px;}
   }
+  .btn-exportar-pdf{background:var(--gold); color:var(--ink); border:none; padding:8px 16px; border-radius:4px; font-family:'Georgia',serif; font-size:13px; cursor:pointer; margin-bottom:16px;}
+  .btn-exportar-pdf:hover{background:#B8931F;}
+
+  @media print{
+    nav.sidebar, header.topo, .btn, .btn-exportar-pdf, #status-save { display:none !important; }
+    main.conteudo{padding:0 !important;}
+    body{background:#fff !important;}
+    .secao.ativa{max-width:none !important;}
+    .cartao{box-shadow:none !important; border:1px solid #ccc !important; break-inside:avoid;}
+    table.dyn{font-size:11px;}
+  }
 </style>
 </head>
 <body>
@@ -618,7 +629,7 @@ function renderSecao(id){
   const cont = document.getElementById('conteudo');
   if(!estado[id]) estado[id] = {};
 
-  let html = `<div class="secao ativa"><h2>${sec.titulo}</h2><p class="desc">${sec.desc}</p>`;
+  let html = `<div class="secao ativa"><h2>${sec.titulo}</h2><p class="desc">${sec.desc}</p><button class="btn-exportar-pdf" onclick="window.print()">⬇ Exportar PDF</button>`;
 
   sec.campos.forEach(campo=>{
     if(campo.tipo === 'tabela'){
