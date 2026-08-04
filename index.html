@@ -983,6 +983,521 @@ async function excluirTransportadora(id) {
   };
 })();
 
+/* =========================================================
+   EXTENSÃO — Desconto máximo, Comissão, Motivo de reprovação
+   e Comissionamento (fechar fatura + provisionar no Financeiro)
+========================================================= */
+(function(){
+
+  /* ---- 1) Traz comissao_fatura_id junto no mapeamento de pedidos ---- */
+  var mapQuoteFromDbOriginal = mapQuoteFromDb;
+  mapQuoteFromDb = function(q){
+    var base = mapQuoteFromDbOriginal(q);
+    base.comissaoFaturaId = q.comissao_fatura_id || null;
+    base.motivoReprovacao = q.motivo_reprovacao || "";
+    return base;
+  };
+
+  /* ---- 2) Carrega também as faturas de comissão já fechadas ---- */
+  var carregarDadosGestorOriginal = carregarDadosGestor;
+  carregarDadosGestor = async function(){
+    await carregarDadosGestorOriginal();
+    const { data: comissoes } = await sb.from("comissoes_representante").select("*").order("data_fechamento", { ascending: false });
+    state.admin.comissoes = comissoes || [];
+    if (state.admin.comissaoRepId === undefined) state.admin.comissaoRepId = "";
+  };
+
+  /* ---- 3) Desconto máximo permitido pelo representante ---- */
+  var draftAtualizarDescontoOriginal = draftAtualizarDesconto;
+  draftAtualizarDesconto = function(v){
+    var max = (state.session && state.session.descontoMaximo != null) ? Number(state.session.descontoMaximo) : 100;
+    var val = Number(v) || 0;
+    if (max > 0 && val > max) {
+      val = max;
+      alert("O desconto máximo permitido pra você é " + max + "%.");
+    }
+    state.draftQuote.desconto = val;
+    render();
+  };
+
+  /* ---- 4) Motivo obrigatório ao reprovar um orçamento ---- */
+  var atualizarStatusOrcamentoOriginal = atualizarStatusOrcamento;
+  atualizarStatusOrcamento = async function(id, status){
+    if (status === "Reprovado") {
+      state.modal = { type: "motivoReprovacao", data: { quoteId: id, motivoSelecionado: "", motivoTexto: "" }, erro: "" };
+      render();
+      return;
+    }
+    return atualizarStatusOrcamentoOriginal(id, status);
+  };
+
+  var MOTIVOS_REPROVACAO = ["Preço", "Prazo de entrega", "Concorrência", "Cliente desistiu", "Condição de pagamento", "Outro"];
+
+  function confirmarMotivoAlterarSelect(v){
+    state.modal.data.motivoSelecionado = v;
+    render();
+  }
+  window.confirmarMotivoAlterarSelect = confirmarMotivoAlterarSelect;
+
+  async function confirmarReprovacao(){
+    var d = state.modal.data;
+    var motivoSel = d.motivoSelecionado;
+    var motivoTexto = (document.getElementById("motivoReprovacaoTexto") ? document.getElementById("motivoReprovacaoTexto").value.trim() : "");
+    if (!motivoSel) { state.modal.erro = "Selecione o motivo."; render(); return; }
+    if (motivoSel === "Outro" && !motivoTexto) { state.modal.erro = "Descreva o motivo."; render(); return; }
+    var motivoFinal = motivoSel === "Outro" ? motivoTexto : (motivoSel + (motivoTexto ? " — " + motivoTexto : ""));
+
+    await sb.from("quotes").update({ status: "Reprovado", motivo_reprovacao: motivoFinal }).eq("id", d.quoteId);
+    state.myQuotes = state.myQuotes.map(q => q.id === d.quoteId ? { ...q, status: "Reprovado", motivoReprovacao: motivoFinal } : q);
+    state.modal = null;
+    render();
+  }
+  window.confirmarReprovacao = confirmarReprovacao;
+
+  /* ---- 5) Estende o modal: motivoReprovacao + campos novos em editarRep ---- */
+  var renderModalAntesExtensao = renderModal;
+  renderModal = function(){
+    if (state.modal.type === "motivoReprovacao") {
+      var d = state.modal.data;
+      var opcoes = '<option value="">— selecione —</option>' + MOTIVOS_REPROVACAO.map(m =>
+        '<option value="'+m+'" '+(m===d.motivoSelecionado?"selected":"")+'>'+m+'</option>').join("");
+      return '<div class="overlay"><div class="modal"><div class="modal-head"><h3>Motivo da reprovação</h3><button onclick="closeModal()">&times;</button></div><div class="modal-body">' +
+        '<label class="campo"><span>Motivo</span><select class="input" onchange="confirmarMotivoAlterarSelect(this.value)">'+opcoes+'</select></label>' +
+        (d.motivoSelecionado === "Outro" || d.motivoSelecionado ? '<label class="campo"><span>Detalhes (opcional, exceto se "Outro")</span><textarea class="input" id="motivoReprovacaoTexto" rows="3"></textarea></label>' : '') +
+        (state.modal.erro ? '<p class="erro">'+esc(state.modal.erro)+'</p>' : '') +
+        '<div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="confirmarReprovacao()">Confirmar reprovação</button></div>' +
+        '</div></div></div>';
+    }
+    if (state.modal.type === "editarRep") {
+      var d = state.modal.data;
+      var ufHtml = '<option value="">—</option>' + UF_LIST.map(uf => '<option value="'+uf+'" '+(uf===d.estado?"selected":"")+'>'+uf+'</option>').join("");
+      return '<div class="overlay"><div class="modal"><div class="modal-head"><h3>Editar perfil — '+esc(d.nome)+'</h3><button onclick="closeModal()">&times;</button></div><div class="modal-body">' +
+        (d.foto_url ? '<img src="'+esc(d.foto_url)+'" style="width:64px;height:64px;border-radius:999px;object-fit:cover;margin-bottom:10px">' : '') +
+        '<label class="campo"><span>Foto de perfil</span><input type="file" accept="image/*" class="input" id="repFoto"></label>' +
+        '<label class="campo"><span>CPF</span><input class="input" id="repCpf" value="'+esc(d.cpf||"")+'"></label>' +
+        '<label class="campo"><span>Endereço (rua)</span><input class="input" id="repEndereco" value="'+esc(d.endereco||"")+'"></label>' +
+        '<div class="row2"><label class="campo"><span>Número</span><input class="input" id="repNumero" value="'+esc(d.numero||"")+'"></label>' +
+        '<label class="campo"><span>Bairro</span><input class="input" id="repBairro" value="'+esc(d.bairro||"")+'"></label></div>' +
+        '<div class="row3"><label class="campo"><span>CEP</span><input class="input" id="repCep" value="'+esc(d.cep||"")+'"></label>' +
+        '<label class="campo"><span>Cidade</span><input class="input" id="repCidade" value="'+esc(d.cidade||"")+'"></label>' +
+        '<label class="campo"><span>Estado</span><select class="input" id="repEstado">'+ufHtml+'</select></label></div>' +
+        '<hr style="border:none;border-top:1px solid #eee6d6;margin:14px 0">' +
+        '<p class="sub" style="margin-bottom:8px;"><b>Visível só pra gestão</b></p>' +
+        '<div class="row2"><label class="campo"><span>Desconto máximo permitido (%)</span><input type="number" min="0" max="100" step="0.1" class="input" id="repDescontoMaximo" value="'+(d.desconto_maximo!=null?d.desconto_maximo:0)+'"></label>' +
+        '<label class="campo"><span>Comissão (%)</span><input type="number" min="0" max="100" step="0.1" class="input" id="repComissaoPct" value="'+(d.comissao_pct!=null?d.comissao_pct:0)+'"></label></div>' +
+        (state.modal.erro ? '<p class="erro">'+esc(state.modal.erro)+'</p>' : '') +
+        '<div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="salvarEdicaoRepresentante()">Salvar</button></div>' +
+        '</div></div></div>';
+    }
+    return renderModalAntesExtensao();
+  };
+
+  /* ---- 6) Salvar também desconto_maximo e comissao_pct ao editar representante ---- */
+  var salvarEdicaoRepresentanteOriginal = salvarEdicaoRepresentante;
+  salvarEdicaoRepresentante = async function(){
+    var d = state.modal.data;
+    var payload = {
+      endereco: document.getElementById("repEndereco").value.trim(),
+      numero: document.getElementById("repNumero").value.trim(),
+      bairro: document.getElementById("repBairro").value.trim(),
+      cidade: document.getElementById("repCidade").value.trim(),
+      estado: document.getElementById("repEstado").value,
+      cep: document.getElementById("repCep").value.trim(),
+      cpf: document.getElementById("repCpf").value.trim(),
+      desconto_maximo: Number(document.getElementById("repDescontoMaximo").value) || 0,
+      comissao_pct: Number(document.getElementById("repComissaoPct").value) || 0,
+    };
+    var fileInput = document.getElementById("repFoto");
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+      var file = fileInput.files[0];
+      var path = "rep_" + d.id + "_" + Date.now() + "_" + file.name.replace(/[^a-zA-Z0-9.]/g, "_");
+      const { error: upErr } = await sb.storage.from("fotos").upload(path, file, { upsert: true });
+      if (upErr) { state.modal.erro = "Erro ao enviar foto: " + upErr.message; render(); return; }
+      const { data: urlData } = sb.storage.from("fotos").getPublicUrl(path);
+      payload.foto_url = urlData.publicUrl;
+    }
+    await sb.from("reps").update(payload).eq("id", d.id);
+    state.admin.reps = state.admin.reps.map(r => r.id === d.id ? { ...r, ...payload } : r);
+    state.modal = null; render();
+  };
+
+  /* ---- 7) Nova aba "Comissionamento" no painel do gestor ---- */
+  renderPainelGestor = function(){
+    var a = state.admin;
+    var tabsHtml = [["dashboard","Dashboard"],["representantes","Representantes"],["clientes","Clientes"],["orcamentos","Orçamentos"],["pedidos","Pedidos"],["comissionamento","Comissionamento"],["precos","Preços"],["transportadoras","Transportadoras"]].map(t =>
+      '<button class="tab ' + (a.aba===t[0]?"active":"") + '" onclick="setAbaGestor(\''+t[0]+'\')">'+t[1]+'</button>'
+    ).join("");
+    var body =
+      a.aba === "dashboard" ? renderDashboard() :
+      a.aba === "representantes" ? renderAbaReps() :
+      a.aba === "clientes" ? renderAbaClientesGestor() :
+      a.aba === "orcamentos" ? renderAbaOrcamentosGestor() :
+      a.aba === "pedidos" ? renderAbaPedidosGestor() :
+      a.aba === "comissionamento" ? renderAbaComissionamento() :
+      a.aba === "precos" ? renderAbaPrecos() : renderAbaTransportadoras();
+    return '<div class="header gestor no-print"><div><h1>NC · Painel do Gestor</h1><p>'+a.reps.length+' representante(s) cadastrado(s)</p></div><button class="btn btn-secondary" onclick="sairGestor()">Sair</button></div>' +
+      '<div class="tabs no-print">'+tabsHtml+'</div><main>'+body+'</main>' +
+      (state.modal ? renderModal() : '');
+  };
+
+  function mudarComissaoRep(id){ state.admin.comissaoRepId = id; render(); }
+  window.mudarComissaoRep = mudarComissaoRep;
+
+  function renderAbaComissionamento(){
+    var a = state.admin;
+    var repId = a.comissaoRepId || "";
+    var repsHtml = '<option value="">Selecione um representante</option>' + a.reps.map(r => '<option value="'+r.id+'" '+(r.id===repId?"selected":"")+'>'+esc(r.nome)+'</option>').join("");
+
+    if (!repId) {
+      return '<div class="section-head"><h2>Comissionamento</h2></div>' +
+        '<div class="card"><label class="campo"><span>Representante</span><select class="input" onchange="mudarComissaoRep(this.value)">'+repsHtml+'</select></label></div>';
+    }
+
+    var rep = a.reps.find(r => r.id === repId) || {};
+    var comissaoPct = Number(rep.comissao_pct || 0);
+    var pedidosElegiveis = a.orders.filter(o => o.repId === repId && o.status !== "Cancelado" && !o.comissaoFaturaId);
+    var valorBase = pedidosElegiveis.reduce((s,o) => s + o.total, 0);
+    var valorComissao = valorBase * comissaoPct / 100;
+
+    var faturas = (a.comissoes || []).filter(c => c.rep_id === repId);
+
+    var linhasPedidos = pedidosElegiveis.map(o =>
+      '<div class="list-item"><div><p class="titulo">'+esc(o.clienteNome)+'</p><p class="sub">'+esc(o.criadoEm)+' · '+fmt(o.total)+'</p></div>' + badge(o.status) + '</div>'
+    ).join("") || '<div class="empty">Nenhum pedido pendente de comissionamento.</div>';
+
+    var linhasFaturas = faturas.map(f =>
+      '<div class="list-item"><div><p class="titulo">Fechada em '+new Date(f.data_fechamento).toLocaleDateString("pt-BR")+' · '+fmt(f.valor_comissao)+'</p>' +
+      '<p class="sub">NF: '+esc(f.nota_fiscal_numero||"—")+' · Vencimento: '+(f.data_vencimento_nota?new Date(f.data_vencimento_nota+"T00:00:00").toLocaleDateString("pt-BR"):"—")+'</p></div>' +
+      '<label style="display:flex;align-items:center;gap:6px;font-size:13px;"><input type="checkbox" '+(f.nota_recebida?"checked":"")+' onchange="alternarNotaRecebida(\''+f.id+'\', this.checked)"> Nota recebida</label>' +
+      '</div>'
+    ).join("") || '<div class="empty">Nenhuma fatura fechada ainda.</div>';
+
+    return '<div class="section-head"><h2>Comissionamento — '+esc(rep.nome)+'</h2>' +
+      '<select class="input" style="max-width:280px" onchange="mudarComissaoRep(this.value)">'+repsHtml+'</select></div>' +
+      '<div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">' +
+        '<div class="kpi-card"><p class="lbl">Comissão do representante</p><p class="val">'+comissaoPct+'%</p></div>' +
+        '<div class="kpi-card"><p class="lbl">Pedidos pendentes de fatura</p><p class="val">'+pedidosElegiveis.length+'</p></div>' +
+        '<div class="kpi-card"><p class="lbl">Valor a provisionar</p><p class="val">'+fmt(valorComissao)+'</p></div>' +
+      '</div>' +
+      '<h3 style="font-size:14px;color:#6b625a;margin-bottom:10px">Pedidos ainda não incluídos em fatura</h3>' +
+      '<div class="card">'+linhasPedidos+'</div>' +
+      (pedidosElegiveis.length > 0 ? '<button class="btn btn-primary" style="margin-top:14px;" onclick="fecharFaturaComissao(\''+repId+'\')">Fechar fatura e gerar provisionamento no Financeiro</button>' : '') +
+      '<h3 style="font-size:14px;color:#6b625a;margin:22px 0 10px">Faturas já fechadas</h3>' +
+      '<div class="card">'+linhasFaturas+'</div>';
+  }
+  window.renderAbaComissionamento = renderAbaComissionamento;
+
+  async function fecharFaturaComissao(repId){
+    var a = state.admin;
+    var rep = a.reps.find(r => r.id === repId);
+    var pedidosElegiveis = a.orders.filter(o => o.repId === repId && o.status !== "Cancelado" && !o.comissaoFaturaId);
+    if (pedidosElegiveis.length === 0) { alert("Nada pendente pra esse representante."); return; }
+    var comissaoPct = Number(rep.comissao_pct || 0);
+    var valorComissao = pedidosElegiveis.reduce((s,o) => s + o.total, 0) * comissaoPct / 100;
+
+    var notaFiscalNumero = prompt("Número da nota fiscal do representante (opcional, pode deixar em branco por enquanto):") || "";
+    var vencimentoStr = prompt("Data de vencimento da nota (AAAA-MM-DD, opcional):") || "";
+    var vencimento = /^\d{4}-\d{2}-\d{2}$/.test(vencimentoStr) ? vencimentoStr : null;
+
+    const { data: faturaData, error: erroFatura } = await sb.from("comissoes_representante").insert({
+      rep_id: repId, rep_nome: rep.nome, valor_comissao: valorComissao,
+      nota_fiscal_numero: notaFiscalNumero || null, data_vencimento_nota: vencimento,
+    }).select().single();
+    if (erroFatura) { alert("Erro ao fechar fatura: " + erroFatura.message); return; }
+
+    const { data: contaPagarData, error: erroContaPagar } = await sb.from("contas_pagar").insert({
+      fornecedor: rep.nome, descricao: "Comissão de representante — fechamento " + new Date().toLocaleDateString("pt-BR"),
+      categoria: "Comissão de representante", grupo_dre: "Despesa Operacional",
+      valor: valorComissao, vencimento: vencimento, forma_pagamento: null,
+      confirmado: false, origem: "Comissão representante", lancado_por: "Sistema (Comissionamento)",
+    }).select().single();
+    if (!erroContaPagar && contaPagarData) {
+      await sb.from("comissoes_representante").update({ contas_pagar_id: contaPagarData.id }).eq("id", faturaData.id);
+    }
+
+    for (var i=0; i<pedidosElegiveis.length; i++) {
+      await sb.from("orders").update({ comissao_fatura_id: faturaData.id }).eq("id", pedidosElegiveis[i].id);
+    }
+
+    await carregarDadosGestor();
+    render();
+  }
+  window.fecharFaturaComissao = fecharFaturaComissao;
+
+  async function alternarNotaRecebida(faturaId, valor){
+    await sb.from("comissoes_representante").update({ nota_recebida: valor }).eq("id", faturaId);
+    state.admin.comissoes = state.admin.comissoes.map(f => f.id === faturaId ? { ...f, nota_recebida: valor } : f);
+    render();
+  }
+  window.alternarNotaRecebida = alternarNotaRecebida;
+
+})();
+
+/* =========================================================
+   EXTENSÃO 2 — Prazo de envio, tipo de contato na visita,
+   Materiais NC, e correção do desconto máximo chegar pro representante
+========================================================= */
+(function(){
+
+  /* ---- Corrige: leva o desconto máximo pro state.session no login/cadastro ---- */
+  doLogin = async function(){
+    var usuario = document.getElementById("loginUsuario").value.trim();
+    var senha = document.getElementById("loginSenha").value;
+    var senhaHash = await hashSenha(senha);
+    const { data, error } = await sb.from("reps").select("*").ilike("usuario", usuario).eq("senha", senhaHash).maybeSingle();
+    if (error || !data) { state.loginErro = "Usuário ou senha inválidos."; render(); return; }
+    state.session = { id: data.id, nome: data.nome, usuario: data.usuario, descontoMaximo: data.desconto_maximo || 0 };
+    await entrarComoRep();
+  };
+  doRegister = async function(){
+    var nome = document.getElementById("loginNome").value.trim();
+    var usuario = document.getElementById("loginUsuario").value.trim();
+    var senha = document.getElementById("loginSenha").value;
+    if (!nome || !usuario || !senha) { state.loginErro = "Preencha todos os campos."; render(); return; }
+    const { data: existente } = await sb.from("reps").select("id").ilike("usuario", usuario).maybeSingle();
+    if (existente) { state.loginErro = "Esse usuário já existe."; render(); return; }
+    var senhaHash = await hashSenha(senha);
+    const { data, error } = await sb.from("reps").insert({ nome, usuario, senha: senhaHash }).select().single();
+    if (error) { state.loginErro = "Erro ao cadastrar: " + error.message; render(); return; }
+    state.session = { id: data.id, nome: data.nome, usuario: data.usuario, descontoMaximo: data.desconto_maximo || 0 };
+    await entrarComoRep();
+  };
+
+  /* ---- Prazo de envio no pedido ---- */
+  var renderModalPedidoOriginal = renderModalPedido;
+  renderModalPedido = function(){
+    var html = renderModalPedidoOriginal();
+    var campoNovo = '<label class="campo"><span>Prazo de envio previsto</span><input type="date" class="input" id="pedPrazoEnvio" value="'+(state.pedidoDraft.prazoEnvio||"")+'"></label>';
+    return html.replace('<label class="campo"><span>Observações</span>', campoNovo + '<label class="campo"><span>Observações</span>');
+  };
+
+  var confirmarGerarPedidoOriginal = confirmarGerarPedido;
+  confirmarGerarPedido = async function(){
+    var q = state.myQuotes.find(x => x.id === state.pedidoDraft.quoteId);
+    var formaPagamentoSel = document.getElementById("pedFormaPagamento").value;
+    var formaPagamento = formaPagamentoSel === "Outro" ? (document.getElementById("pedFormaPagamentoCustom").value.trim() || "Outro") : formaPagamentoSel;
+    var carrierId = document.getElementById("pedTransportadora").value;
+    var carrier = state.carriers.find(c => c.id === carrierId);
+    var observacoes = document.getElementById("pedObservacoes").value.trim();
+    var prazoEnvio = document.getElementById("pedPrazoEnvio").value || null;
+    var payload = { rep_id: q.repId, rep_nome: q.repNome, client_id: q.clientId, cliente_nome: q.clienteNome, cliente_tipo: q.clienteTipo,
+      quote_id: q.id, itens: q.itens, subtotal: q.subtotal, desconto: q.desconto, total: q.total,
+      forma_pagamento: formaPagamento, carrier_id: carrierId || null, carrier_nome: carrier ? carrier.nome : null,
+      observacoes, prazo_envio: prazoEnvio, status: "Em aberto" };
+    const { data } = await sb.from("orders").insert(payload).select().single();
+    var pedido = mapQuoteFromDb(data);
+    pedido.carrierNome = carrier ? carrier.nome : null;
+    pedido.prazoEnvio = prazoEnvio;
+    state.myOrders.push(pedido);
+    state.modal = null; state.pedidoDraft = null; state.tab = "pedidos";
+    render();
+    notificarGestor("Pedido", pedido);
+  };
+
+  var mapQuoteFromDbOriginal2 = mapQuoteFromDb;
+  mapQuoteFromDb = function(q){
+    var base = mapQuoteFromDbOriginal2(q);
+    base.prazoEnvio = q.prazo_envio || null;
+    return base;
+  };
+
+  var renderPedidosOriginal = renderPedidos;
+  renderPedidos = function(){
+    var list = state.myOrders.slice().reverse();
+    var itemsHtml = list.length === 0 ? '<div class="empty">Nenhum pedido gerado ainda. Aprove um orçamento e clique em "Selecionar → Gerar pedido".</div>' : list.map(p =>
+      '<div class="list-item"><div><p class="titulo">'+esc(p.clienteNome)+' <span style="color:#a89e93">· '+esc(p.criadoEm)+'</span></p>' +
+      '<p class="sub">'+p.itens.length+' item(ns) · '+fmt(p.total)+' · '+esc(p.formaPagamento||"—")+(p.carrierNome?' · Transp.: '+esc(p.carrierNome):'')+(p.prazoEnvio?' · Envio previsto: '+fmtData(p.prazoEnvio):'')+'</p>' +
+      (p.observacoes ? '<p class="sub">Obs.: '+esc(p.observacoes)+'</p>' : '') + '</div>' +
+      '<div class="actions">' + badge(p.status) +
+      '<select class="status-select" onchange="atualizarStatusPedido(\''+p.id+'\', this.value)">' +
+        ["Em aberto","Faturado","Entregue","Cancelado"].map(s=>'<option value="'+s+'" '+(s===p.status?"selected":"")+'>'+s+'</option>').join("") +
+      '</select>' +
+      '<button class="btn btn-ghost btn-sm" onclick="imprimirDoc(\'Pedido\', \''+p.id+'\', \'myOrders\')">Imprimir / PDF</button>' +
+      '</div></div>'
+    ).join("");
+    return '<div class="section-head"><h2>Pedidos</h2></div><div class="card">'+itemsHtml+'</div>';
+  };
+
+  var renderAgendaOriginal = renderAgenda;
+  renderAgenda = function(){
+    var list = state.myVisits.slice().sort((a,b) => (a.data_followup||"").localeCompare(b.data_followup||""));
+    var itemsHtml = list.length === 0 ? '<div class="empty">Nenhuma visita registrada ainda.</div>' : list.map(v => {
+      var atrasado = v.data_followup && v.data_followup < hojeISO();
+      var hojeF = v.data_followup === hojeISO();
+      var tag = atrasado ? '<span class="badge badge-red">Atrasado</span>' : hojeF ? '<span class="badge badge-amber">Hoje</span>' : '<span class="badge badge-gray">Agendado</span>';
+      return '<div class="list-item reminder-item"><div><p class="titulo">'+esc(v.cliente_nome)+(v.tipo_contato?' · <span style="color:#a89e93">'+esc(v.tipo_contato)+'</span>':'')+'</p>' +
+        '<p class="sub">Visita: '+fmtData(v.data_visita)+' · Próximo follow-up: '+fmtData(v.data_followup)+'</p>' +
+        (v.observacoes ? '<p class="sub">'+esc(v.observacoes)+'</p>' : '') + '</div>' +
+        '<div class="actions">'+tag+'<button class="btn btn-danger btn-sm" onclick="excluirVisita(\''+v.id+'\')">Excluir</button></div></div>';
+    }).join("");
+    return '<div class="section-head"><h2>Agenda de visitas</h2><button class="btn btn-primary" '+(state.myClients.length===0?"disabled":"")+' onclick="abrirNovaVisita()">+ Nova visita</button></div>' +
+      (state.myClients.length===0 ? '<p style="font-size:12px;color:#a89e93;margin-top:-8px">Cadastre um cliente antes de agendar uma visita.</p>' : '') +
+      '<div class="card">'+itemsHtml+'</div>';
+  };
+
+  /* ---- Tipo de contato na visita (Presencial / Telefone) ---- */
+  var renderModalVisitaOriginal = renderModalVisita;
+  renderModalVisita = function(){
+    var d = state.modal.data;
+    var clientesHtml = state.myClients.map(c => '<option value="'+c.id+'" '+(c.id===d.clientId?"selected":"")+'>'+esc(c.nome)+'</option>').join("");
+    var tiposContato = ["Presencial","Telefone"];
+    var tipoContatoHtml = tiposContato.map(t => '<option value="'+t+'" '+(t===d.tipoContato?"selected":"")+'>'+t+'</option>').join("");
+    return '<div class="overlay"><div class="modal"><div class="modal-head"><h3>Nova visita</h3><button onclick="closeModal()">&times;</button></div>' +
+      '<div class="modal-body">' +
+        '<label class="campo"><span>Cliente *</span><select class="input" id="visCliente">'+clientesHtml+'</select></label>' +
+        '<label class="campo"><span>Tipo de contato</span><select class="input" id="visTipoContato">'+tipoContatoHtml+'</select></label>' +
+        '<div class="row2">' +
+          '<label class="campo"><span>Data da visita</span><input type="date" class="input" id="visDataVisita" value="'+d.dataVisita+'"></label>' +
+          '<label class="campo"><span>Próximo follow-up</span><input type="date" class="input" id="visDataFollowup" value="'+d.dataFollowup+'"></label>' +
+        '</div>' +
+        '<label class="campo"><span>Observações</span><textarea class="input" id="visObs" rows="3">'+esc(d.observacoes)+'</textarea></label>' +
+        '<div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="salvarVisita()">Salvar</button></div>' +
+      '</div></div></div>';
+  };
+
+  var abrirNovaVisitaOriginal = abrirNovaVisita;
+  abrirNovaVisita = function(){
+    state.modal = { type: "visita", data: { clientId: state.myClients[0]?.id, dataVisita: hojeISO(), dataFollowup: hojeISO(), observacoes: "", tipoContato: "Presencial" } };
+    render();
+  };
+
+  var salvarVisitaOriginal = salvarVisita;
+  salvarVisita = async function(){
+    var clientId = document.getElementById("visCliente").value;
+    var cliente = state.myClients.find(c => c.id === clientId);
+    var payload = { rep_id: state.session.id, client_id: clientId, cliente_nome: cliente ? cliente.nome : "",
+      data_visita: document.getElementById("visDataVisita").value, data_followup: document.getElementById("visDataFollowup").value,
+      tipo_contato: document.getElementById("visTipoContato").value,
+      observacoes: document.getElementById("visObs").value.trim() };
+    const { data } = await sb.from("visits").insert(payload).select().single();
+    state.myVisits.push(data);
+    state.modal = null; render();
+  };
+
+  /* ---- Aba "Materiais NC" (biblioteca de mídias) pro representante ---- */
+  var TIPOS_MATERIAL = ["Vídeo","Manual","Desenho técnico","Foto","Outro"];
+
+  var renderShellOriginal = renderShell;
+  renderShell = function(){
+    var tabsHtml = [["clientes","Clientes"],["orcamentos","Orçamentos"],["pedidos","Pedidos"],["agenda","Agenda"],["materiais","Materiais NC"]].map(t =>
+      '<button class="tab ' + (state.tab===t[0]?"active":"") + '" onclick="setTab(\''+t[0]+'\')">'+t[1]+'</button>'
+    ).join("");
+    var body = state.tab === "clientes" ? renderClientes() : state.tab === "orcamentos" ? renderOrcamentos() :
+      state.tab === "pedidos" ? renderPedidos() : state.tab === "materiais" ? renderMateriaisNC() : renderAgenda();
+    var pendentes = state.myVisits.filter(v => v.data_followup && v.data_followup <= hojeISO());
+    var banner = pendentes.length > 0 ? '<div class="banner-alert no-print">Você tem ' + pendentes.length + ' follow-up(s) vencendo hoje ou atrasado(s). Veja a aba Agenda.</div>' : '';
+    return '' +
+      '<div class="header no-print"><div><h1>NC · Painel do Representante</h1><p>' + esc(state.session.nome) + '</p></div><button class="btn btn-secondary" onclick="doLogout()">Sair</button></div>' +
+      banner +
+      '<div class="tabs no-print">' + tabsHtml + '</div>' +
+      '<main>' + body + '</main>' +
+      (!EMAIL_CONFIGURADO ? '<p class="banner-config no-print">Notificação por e-mail ainda não configurada (EmailJS pendente).</p>' : '') +
+      (state.modal ? renderModal() : '');
+  };
+
+  state.materiaisNC = state.materiaisNC || [];
+
+  var carregarDadosDoRepOriginal = carregarDadosDoRep;
+  carregarDadosDoRep = async function(){
+    await carregarDadosDoRepOriginal();
+    const { data: materiais } = await sb.from("materiais_nc").select("*").order("categoria").order("titulo");
+    state.materiaisNC = materiais || [];
+  };
+
+  function renderMateriaisNC(){
+    var porCategoria = {};
+    state.materiaisNC.forEach(function(m){
+      var cat = m.categoria || "Geral";
+      if (!porCategoria[cat]) porCategoria[cat] = [];
+      porCategoria[cat].push(m);
+    });
+    var categorias = Object.keys(porCategoria).sort();
+    if (categorias.length === 0) return '<div class="section-head"><h2>Materiais NC</h2></div><div class="empty">Nenhum material disponível ainda.</div>';
+
+    var html = '<div class="section-head"><h2>Materiais NC</h2></div>';
+    categorias.forEach(function(cat){
+      var itens = porCategoria[cat].map(function(m){
+        return '<div class="list-item"><div><p class="titulo">'+esc(m.titulo)+'</p><p class="sub">'+esc(m.tipo||"")+(m.descricao?' · '+esc(m.descricao):"")+'</p></div>' +
+          '<a class="btn btn-yellow btn-sm" href="'+esc(m.url)+'" target="_blank" rel="noopener">Abrir</a></div>';
+      }).join("");
+      html += '<h3 style="font-size:14px;color:#6b625a;margin:18px 0 10px">'+esc(cat)+'</h3><div class="card">'+itens+'</div>';
+    });
+    return html;
+  }
+  window.renderMateriaisNC = renderMateriaisNC;
+
+  /* ---- Gestão de Materiais NC (aba nova no painel do gestor) ---- */
+  renderPainelGestor = function(){
+    var a = state.admin;
+    var tabsHtml = [["dashboard","Dashboard"],["representantes","Representantes"],["clientes","Clientes"],["orcamentos","Orçamentos"],["pedidos","Pedidos"],["comissionamento","Comissionamento"],["materiais","Materiais NC"],["precos","Preços"],["transportadoras","Transportadoras"]].map(t =>
+      '<button class="tab ' + (a.aba===t[0]?"active":"") + '" onclick="setAbaGestor(\''+t[0]+'\')">'+t[1]+'</button>'
+    ).join("");
+    var body =
+      a.aba === "dashboard" ? renderDashboard() :
+      a.aba === "representantes" ? renderAbaReps() :
+      a.aba === "clientes" ? renderAbaClientesGestor() :
+      a.aba === "orcamentos" ? renderAbaOrcamentosGestor() :
+      a.aba === "pedidos" ? renderAbaPedidosGestor() :
+      a.aba === "comissionamento" ? renderAbaComissionamento() :
+      a.aba === "materiais" ? renderAbaMateriaisGestor() :
+      a.aba === "precos" ? renderAbaPrecos() : renderAbaTransportadoras();
+    return '<div class="header gestor no-print"><div><h1>NC · Painel do Gestor</h1><p>'+a.reps.length+' representante(s) cadastrado(s)</p></div><button class="btn btn-secondary" onclick="sairGestor()">Sair</button></div>' +
+      '<div class="tabs no-print">'+tabsHtml+'</div><main>'+body+'</main>' +
+      (state.modal ? renderModal() : '');
+  };
+
+  var carregarDadosGestorOriginal2 = carregarDadosGestor;
+  carregarDadosGestor = async function(){
+    await carregarDadosGestorOriginal2();
+    const { data: materiais } = await sb.from("materiais_nc").select("*").order("categoria").order("titulo");
+    state.admin.materiais = materiais || [];
+  };
+
+  function renderAbaMateriaisGestor(){
+    var lista = state.admin.materiais || [];
+    var linhas = lista.map(function(m){
+      return '<div class="list-item"><div><p class="titulo">'+esc(m.titulo)+'</p><p class="sub">'+esc(m.categoria||"Geral")+' · '+esc(m.tipo||"")+'</p></div>' +
+        '<div class="actions"><a class="btn btn-ghost btn-sm" href="'+esc(m.url)+'" target="_blank">Ver link</a>' +
+        '<button class="btn btn-secondary btn-sm" onclick="excluirMaterialNC(\''+m.id+'\')">Excluir</button></div></div>';
+    }).join("") || '<div class="empty">Nenhum material cadastrado ainda.</div>';
+    var tiposHtml = TIPOS_MATERIAL.map(function(t){ return '<option value="'+t+'">'+t+'</option>'; }).join("");
+    return '<div class="section-head"><h2>Materiais NC</h2></div>' +
+      '<div class="card" style="margin-bottom:16px;">' +
+        '<label class="campo"><span>Categoria</span><input class="input" id="matCategoria" placeholder="Ex: Flanges, Institucional, Vídeos institucionais"></label>' +
+        '<label class="campo"><span>Título</span><input class="input" id="matTitulo"></label>' +
+        '<label class="campo"><span>Tipo</span><select class="input" id="matTipo">'+tiposHtml+'</select></label>' +
+        '<label class="campo"><span>Link (YouTube, PDF, etc.)</span><input class="input" id="matUrl" placeholder="https://..."></label>' +
+        '<label class="campo"><span>Descrição (opcional)</span><input class="input" id="matDescricao"></label>' +
+        '<button class="btn btn-primary" style="margin-top:8px;" onclick="salvarMaterialNC()">Adicionar material</button>' +
+      '</div>' +
+      '<div class="card">'+linhas+'</div>';
+  }
+  window.renderAbaMateriaisGestor = renderAbaMateriaisGestor;
+
+  async function salvarMaterialNC(){
+    var categoria = document.getElementById("matCategoria").value.trim() || "Geral";
+    var titulo = document.getElementById("matTitulo").value.trim();
+    var tipo = document.getElementById("matTipo").value;
+    var url = document.getElementById("matUrl").value.trim();
+    var descricao = document.getElementById("matDescricao").value.trim();
+    if (!titulo || !url) { alert("Preencha pelo menos título e link."); return; }
+    const { data, error } = await sb.from("materiais_nc").insert({ categoria, titulo, tipo, url, descricao }).select().single();
+    if (error) { alert("Erro: " + error.message); return; }
+    state.admin.materiais.push(data);
+    render();
+  }
+  window.salvarMaterialNC = salvarMaterialNC;
+
+  async function excluirMaterialNC(id){
+    if (!confirm("Excluir esse material?")) return;
+    await sb.from("materiais_nc").delete().eq("id", id);
+    state.admin.materiais = state.admin.materiais.filter(function(m){ return m.id !== id; });
+    render();
+  }
+  window.excluirMaterialNC = excluirMaterialNC;
+
+})();
+
 /* ---------------- Boot ---------------- */
 boot();
 </script>
