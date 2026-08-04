@@ -117,6 +117,17 @@
     main.conteudo{padding:18px 14px;}
     .conciliacao-col{grid-template-columns:1fr;}
   }
+  .btn-exportar-pdf{background:var(--gold); color:var(--ink); border:none; padding:8px 16px; border-radius:4px; font-family:'Georgia',serif; font-size:13px; cursor:pointer; margin-bottom:16px;}
+  .btn-exportar-pdf:hover{background:#B8931F;}
+
+  @media print{
+    nav.sidebar, header.topo, .btn, .btn-sm, .btn-ghost, .filtros, .form-linha, .btn-exportar-pdf, #status-save { display:none !important; }
+    main.conteudo{padding:0 !important;}
+    body{background:#fff !important;}
+    .secao.ativa{max-width:none !important;}
+    .cartao{box-shadow:none !important; border:1px solid #ccc !important; break-inside:avoid;}
+    table.dyn{font-size:11px;}
+  }
 </style>
 </head>
 <body>
@@ -376,6 +387,9 @@ function moeda(v){
 }
 function hojeISO(){ return new Date().toISOString().slice(0,10); }
 function escapeHtml(s){ return String(s??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function botaoExportarPDF(){
+  return `<button class="btn-exportar-pdf" onclick="window.print()">⬇ Exportar PDF</button>`;
+}
 
 function statusConta(conta, tipo){
   const pago = tipo==='pagar' ? conta.data_pagamento : conta.data_recebimento;
@@ -422,6 +436,7 @@ function viewResumo(){
   return `<div class="secao ativa">
     <h2>Resumo Financeiro</h2>
     <p class="desc">Visão geral de contas a pagar, a receber e conciliação.</p>
+    ${botaoExportarPDF()}
     <div class="kpis">
       <div class="kpi"><div class="label">Saldo inicial (todas as contas)</div><div class="valor">${moeda(totalSaldoInicialContas)}</div></div>
       <div class="kpi neg"><div class="label">A pagar em aberto</div><div class="valor">${moeda(totalPagarAberto)}</div></div>
@@ -701,6 +716,7 @@ function viewFluxo(){
   return `<div class="secao ativa">
     <h2>Fluxo de Caixa Projetado</h2>
     <p class="desc">Saldo inicial (${moeda(saldoInicialEscopo)}) + contas a pagar/receber dessa conta, ordenado por data. O saldo acumulado sempre considera entradas e saídas juntas, mesmo quando você filtra a visualização.</p>
+    ${botaoExportarPDF()}
     <div class="cartao">
       <div class="filtros" style="margin-bottom:14px;">
         <div class="campo-f"><label>Conta bancária</label>
@@ -1383,6 +1399,7 @@ function viewRelatorio(tipo){
   return `<div class="secao ativa">
     <h2>Relatório · Contas a ${tipo==='receber'?'Receber':'Pagar'}</h2>
     <p class="desc">Filtre e gere a visão que precisar. Marque "por semana" para ver só uma semana (segunda a domingo) por vez.</p>
+    ${botaoExportarPDF()}
 
     <div class="cartao">
       <div class="filtros">
@@ -1572,6 +1589,7 @@ function viewDRE(){
       DRE Gerencial
     </h2>
     <p class="desc">Baseado no que foi efetivamente pago e recebido (regime de caixa) no período, classificado pelo Grupo (DRE) de cada lançamento. Clique numa linha para ver os lançamentos que a compõem.</p>
+    ${botaoExportarPDF()}
 
     <div class="cartao">
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
@@ -1671,6 +1689,7 @@ function viewOrcadoRealizado(){
   return `<div class="secao ativa">
     <h2>Orçado x Realizado</h2>
     <p class="desc">Orçado vem do Plano de Contas (módulo Planejamento — valor mensal). Realizado é o pago/recebido e <b>confirmado</b> no período selecionado (${formatarDataBR(periodoDRE.inicio)} a ${formatarDataBR(periodoDRE.fim)} — ${meses} mês${meses>1?'es':''}). O orçado é multiplicado automaticamente pelo número de meses do período, então dá pra comparar mensal, trimestral, semestral ou anual sem ajustar nada na mão.</p>
+    ${botaoExportarPDF()}
 
     <div class="cartao">
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
