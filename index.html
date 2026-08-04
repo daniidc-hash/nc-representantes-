@@ -1412,19 +1412,59 @@ async function excluirTransportadora(id) {
       porCategoria[cat].push(m);
     });
     var categorias = Object.keys(porCategoria).sort();
-    if (categorias.length === 0) return '<div class="section-head"><h2>Materiais NC</h2></div><div class="empty">Nenhum material disponível ainda.</div>';
+    if (categorias.length === 0) {
+      return '<div class="section-head"><h2>Materiais NC</h2></div>' +
+        '<div class="empty" style="text-align:center;padding:60px 20px;">' +
+        '<div style="font-size:40px;margin-bottom:10px;">📁</div>' +
+        '<p style="color:#a89e93;">Nenhum material disponível ainda.<br>Fale com a gestão pra saber quando a biblioteca for atualizada.</p></div>';
+    }
 
-    var html = '<div class="section-head"><h2>Materiais NC</h2></div>';
+    var ICONES_TIPO = {
+      "Vídeo":            { cor: "#D9483B", svg: '<path d="M8 5v14l11-7z"/>' },
+      "Manual":           { cor: "#2E6E4E", svg: '<path d="M6 4h9a2 2 0 0 1 2 2v14l-6.5-3L6 20V4z"/>' },
+      "Desenho técnico":  { cor: "#14213D", svg: '<path d="M3 17l6-6 4 4 8-8" stroke="#fff" stroke-width="2" fill="none"/><circle cx="19" cy="6" r="2"/>' },
+      "Foto":             { cor: "#D89A1F", svg: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2" fill="#fff"/><path d="M3 17l5-5 4 3 3-3 5 5" stroke="#fff" stroke-width="1.5" fill="none"/>' },
+      "Outro":            { cor: "#6b625a", svg: '<path d="M3 6h6l2 2h10v11H3z"/>' },
+    };
+
+    var html = '<div class="section-head"><h2>Materiais NC</h2><p class="sub" style="margin-top:-4px;">Vídeos, manuais, desenhos técnicos e fotos pra usar nas suas visitas e apresentações.</p></div>';
+
     categorias.forEach(function(cat){
-      var itens = porCategoria[cat].map(function(m){
-        return '<div class="list-item"><div><p class="titulo">'+esc(m.titulo)+'</p><p class="sub">'+esc(m.tipo||"")+(m.descricao?' · '+esc(m.descricao):"")+'</p></div>' +
-          '<a class="btn btn-yellow btn-sm" href="'+esc(m.url)+'" target="_blank" rel="noopener">Abrir</a></div>';
+      var cards = porCategoria[cat].map(function(m){
+        var ic = ICONES_TIPO[m.tipo] || ICONES_TIPO["Outro"];
+        return '<a href="'+esc(m.url)+'" target="_blank" rel="noopener" class="material-card" style="border-top:4px solid '+ic.cor+';">' +
+          '<div class="material-icone" style="background:'+ic.cor+'22;">' +
+            '<svg width="26" height="26" viewBox="0 0 24 24" fill="'+ic.cor+'">'+ic.svg+'</svg>' +
+          '</div>' +
+          '<p class="material-titulo">'+esc(m.titulo)+'</p>' +
+          '<p class="material-tipo" style="color:'+ic.cor+';">'+esc(m.tipo||"Material")+'</p>' +
+          (m.descricao ? '<p class="material-desc">'+esc(m.descricao)+'</p>' : '') +
+          '<span class="material-abrir">Abrir →</span>' +
+        '</a>';
       }).join("");
-      html += '<h3 style="font-size:14px;color:#6b625a;margin:18px 0 10px">'+esc(cat)+'</h3><div class="card">'+itens+'</div>';
+      html += '<h3 style="font-size:14px;color:#6b625a;margin:20px 0 12px;text-transform:uppercase;letter-spacing:.4px;">'+esc(cat)+'</h3>' +
+        '<div class="materiais-grid">'+cards+'</div>';
     });
     return html;
   }
   window.renderMateriaisNC = renderMateriaisNC;
+
+  /* Estilos do grid de Materiais NC, injetados uma única vez */
+  if (!document.getElementById("estilo-materiais-nc")) {
+    var estiloMateriais = document.createElement("style");
+    estiloMateriais.id = "estilo-materiais-nc";
+    estiloMateriais.textContent =
+      '.materiais-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;}' +
+      '.material-card{background:#fff;border-radius:12px;padding:18px;text-decoration:none;display:block;' +
+        'box-shadow:0 2px 8px rgba(20,33,61,.08);transition:transform .15s ease, box-shadow .15s ease;position:relative;}' +
+      '.material-card:hover{transform:translateY(-3px);box-shadow:0 8px 20px rgba(20,33,61,.15);}' +
+      '.material-icone{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:10px;}' +
+      '.material-titulo{font-weight:700;color:var(--navy);margin:0 0 2px;font-size:14px;line-height:1.3;}' +
+      '.material-tipo{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin:0 0 6px;}' +
+      '.material-desc{font-size:12px;color:#8a8175;margin:0 0 8px;line-height:1.4;}' +
+      '.material-abrir{font-size:12.5px;font-weight:700;color:var(--navy);}';
+    document.head.appendChild(estiloMateriais);
+  }
 
   /* ---- Gestão de Materiais NC (aba nova no painel do gestor) ---- */
   renderPainelGestor = function(){
