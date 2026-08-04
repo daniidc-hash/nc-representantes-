@@ -85,6 +85,8 @@
     letter-spacing:.3px; padding:8px; border-bottom:2px solid #E7DFCC; white-space:nowrap;}
   table.dyn td{padding:7px 8px; border-bottom:1px solid #F0EAD9; vertical-align:middle;}
   table.dyn tr:hover td{background:#FBF6EA;}
+  .linha-dre-clicavel{cursor:pointer;}
+  .linha-dre-clicavel:hover td{background:#F3E9D2 !important;}
   .badge{display:inline-block; padding:2px 9px; border-radius:20px; font-size:11.5px; font-weight:bold;}
   .badge-pago{background:#E4F0E4; color:var(--ok);}
   .badge-pendente{background:#FBF0DC; color:var(--warn);}
@@ -200,6 +202,7 @@ const ABAS = [
   {id:"resumo", titulo:"Resumo"},
   {id:"pagar", titulo:"Contas a Pagar"},
   {id:"receber", titulo:"Contas a Receber"},
+  {id:"bancos", titulo:"Contas Bancárias"},
   {id:"relatorio_receber", titulo:"Relatório · A Receber"},
   {id:"relatorio_pagar", titulo:"Relatório · A Pagar"},
   {id:"fluxo", titulo:"Fluxo de Caixa"},
@@ -219,7 +222,7 @@ const filtrosRelatorio = {
 function hojeISOsafe(){ return new Date().toISOString().slice(0,10); }
 
 let filtroSemanal = { semanaRef: hojeISOsafe(), modo: 'ambos' };
-let filtroFluxo = { modo: 'ambos' };
+let filtroFluxo = { modo: 'ambos', conta: 'todas', dataInicio: '', dataFim: '' };
 
 async function iniciarApp(){
   document.getElementById('tela-login').style.display = 'none';
@@ -244,15 +247,20 @@ function montarSidebar(){
 
 let orcamentoContas = []; // vem do módulo Planejamento (tabela planejamento, secao='orcamento')
 let bancos = [];
+let representantesLista = [];
+
+const REGIOES_BR = ["Norte","Nordeste","Centro-Oeste","Sudeste","Sul"];
+const FORMAS_PAGAMENTO = ["Pix","Boleto","Transferência (TED/DOC)","Cartão de crédito","Cartão de débito","Dinheiro","Cheque","Outro"];
 
 async function carregarTudo(){
-  const [p, r, e, cfg, orc, bcs] = await Promise.all([
+  const [p, r, e, cfg, orc, bcs, reps] = await Promise.all([
     supabaseClient.from('contas_pagar').select('*').order('vencimento', {ascending:true}),
     supabaseClient.from('contas_receber').select('*').order('vencimento', {ascending:true}),
     supabaseClient.from('extrato_bancario').select('*').order('data', {ascending:true}),
     supabaseClient.from('financeiro_config').select('*').eq('chave','saldo_inicial').maybeSingle(),
     supabaseClient.from('planejamento').select('dados').eq('secao','orcamento').maybeSingle(),
     supabaseClient.from('bancos').select('*').order('nome', {ascending:true}),
+    supabaseClient.from('reps').select('nome').order('nome', {ascending:true}),
   ]);
   contasPagar = p.data || [];
   contasReceber = r.data || [];
@@ -260,6 +268,7 @@ async function carregarTudo(){
   saldoInicial = (cfg.data && cfg.data.valor && cfg.data.valor.valor) ? Number(cfg.data.valor.valor) : 0;
   orcamentoContas = (orc.data && orc.data.dados && orc.data.dados.contas) ? orc.data.dados.contas : [];
   bancos = bcs.data || [];
+  representantesLista = (reps.data || []).map(r=>r.nome).filter(Boolean);
 }
 
 async function adicionarBancoRapido(){
@@ -268,6 +277,77 @@ async function adicionarBancoRapido(){
   await supabaseClient.from('bancos').insert({nome});
   await carregarTudo();
   renderAba('pagar');
+}
+
+/* ================= CONTAS BANCÁRIAS (cadastro) ================= */
+function viewBancos(){
+  const linhas = bancos.map(b=>`
+    <tr>
+      <td><input type="text" id="nome-banco-${b.id}" value="${escapeHtml(b.nome)}"></td>
+      <td><input type="number" step="0.01" id="saldo-banco-${b.id}" value="${b.saldo_inicial||0}" style="width:130px;"></td>
+      <td>${b.criado_em ? new Date(b.criado_em).toLocaleDateString('pt-BR') : ''}</td>
+      <td>
+        <button class="btn btn-sm btn-ghost" onclick="renomearBanco('${b.id}')">Salvar</button>
+        <span class="link-remover" onclick="removerBanco('${b.id}')" title="Remover">✕</span>
+        <span class="msg" id="msg-banco-${b.id}"></span>
+      </td>
+    </tr>
+  `).join('');
+
+  return `<div class="secao ativa">
+    <h2>Contas Bancárias</h2>
+    <p class="desc">Cadastre aqui as contas (ex: Conta Ailos, Conta Itaú, Caixinha, Caixa Cartão Crédito) e o saldo inicial de cada uma — usado no Fluxo de Caixa e na Conciliação Bancária.</p>
+
+    <div class="cartao">
+      <h3>Nova conta</h3>
+      <div class="form-linha">
+        <div class="campo"><label>Nome da conta</label><input type="text" id="novo-banco-nome" placeholder="Ex: Conta Itaú"></div>
+        <div class="campo"><label>Saldo inicial</label><input type="number" step="0.01" id="novo-banco-saldo" value="0"></div>
+        <div class="campo" style="align-self:end;"><button class="btn btn-sm" onclick="adicionarBancoCadastro()">Adicionar</button></div>
+      </div>
+      <span class="msg" id="msg-novo-banco"></span>
+    </div>
+
+    <div class="cartao">
+      <h3>Contas cadastradas (${bancos.length})</h3>
+      <table class="dyn">
+        <thead><tr><th>Nome</th><th>Saldo inicial</th><th>Cadastrada em</th><th></th></tr></thead>
+        <tbody>${linhas || `<tr><td colspan="4" style="color:var(--muted); padding:14px 8px;">Nenhuma conta cadastrada ainda.</td></tr>`}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+async function adicionarBancoCadastro(){
+  const nome = document.getElementById('novo-banco-nome').value.trim();
+  const saldo = parseFloat(document.getElementById('novo-banco-saldo').value) || 0;
+  const msg = document.getElementById('msg-novo-banco');
+  if(!nome){ msg.textContent = 'Digite um nome.'; msg.className = 'msg erro'; return; }
+  const { error } = await supabaseClient.from('bancos').insert({ nome, saldo_inicial: saldo });
+  if(error){ msg.textContent = 'Erro ao salvar.'; msg.className = 'msg erro'; console.error(error); return; }
+  document.getElementById('novo-banco-nome').value = '';
+  document.getElementById('novo-banco-saldo').value = '0';
+  msg.textContent = 'Adicionada ✓'; msg.className = 'msg ok';
+  await carregarTudo();
+  renderAba('bancos');
+}
+
+async function renomearBanco(id){
+  const novoNome = document.getElementById(`nome-banco-${id}`).value.trim();
+  const novoSaldo = parseFloat(document.getElementById(`saldo-banco-${id}`).value) || 0;
+  const msg = document.getElementById(`msg-banco-${id}`);
+  if(!novoNome){ msg.textContent = 'Nome vazio.'; msg.className = 'msg erro'; return; }
+  const { error } = await supabaseClient.from('bancos').update({ nome: novoNome, saldo_inicial: novoSaldo }).eq('id', id);
+  if(error){ msg.textContent = 'Erro'; msg.className = 'msg erro'; console.error(error); return; }
+  msg.textContent = 'Salvo ✓'; msg.className = 'msg ok';
+  await carregarTudo();
+}
+
+async function removerBanco(id){
+  if(!confirm('Remover essa conta bancária? Lançamentos já feitos com ela continuam guardando o nome, só some da lista de seleção.')) return;
+  await supabaseClient.from('bancos').delete().eq('id', id);
+  await carregarTudo();
+  renderAba('bancos');
 }
 
 /* ---- Semana (segunda a domingo) ---- */
@@ -314,6 +394,7 @@ function renderAba(id){
   if(id==='resumo') cont.innerHTML = viewResumo();
   else if(id==='pagar') cont.innerHTML = viewContas('pagar');
   else if(id==='receber') cont.innerHTML = viewContas('receber');
+  else if(id==='bancos') cont.innerHTML = viewBancos();
   else if(id==='fluxo') cont.innerHTML = viewFluxo();
   else if(id==='semanal') cont.innerHTML = viewSemanal();
   else if(id==='conciliacao') cont.innerHTML = viewConciliacao();
@@ -336,12 +417,13 @@ function viewResumo(){
   const pagarProx30 = contasPagar.filter(c=>!c.data_pagamento && c.vencimento>=hojeISO() && c.vencimento<=em30ISO).reduce((s,c)=>s+Number(c.valor),0);
   const receberProx30 = contasReceber.filter(c=>!c.data_recebimento && c.vencimento>=hojeISO() && c.vencimento<=em30ISO).reduce((s,c)=>s+Number(c.valor),0);
   const naoConciliados = extrato.filter(e=>!e.conciliado).length;
+  const totalSaldoInicialContas = bancos.reduce((s,b)=>s+Number(b.saldo_inicial||0),0);
 
   return `<div class="secao ativa">
     <h2>Resumo Financeiro</h2>
     <p class="desc">Visão geral de contas a pagar, a receber e conciliação.</p>
     <div class="kpis">
-      <div class="kpi"><div class="label">Saldo inicial cadastrado</div><div class="valor">${moeda(saldoInicial)}</div></div>
+      <div class="kpi"><div class="label">Saldo inicial (todas as contas)</div><div class="valor">${moeda(totalSaldoInicialContas)}</div></div>
       <div class="kpi neg"><div class="label">A pagar em aberto</div><div class="valor">${moeda(totalPagarAberto)}</div></div>
       <div class="kpi pos"><div class="label">A receber em aberto</div><div class="valor">${moeda(totalReceberAberto)}</div></div>
       <div class="kpi ${atrasadasPagar+atrasadasReceber>0?'alerta':''}"><div class="label">Contas atrasadas</div><div class="valor">${atrasadasPagar+atrasadasReceber}</div></div>
@@ -349,22 +431,8 @@ function viewResumo(){
       <div class="kpi"><div class="label">A receber próx. 30 dias</div><div class="valor">${moeda(receberProx30)}</div></div>
       <div class="kpi ${naoConciliados>0?'alerta':''}"><div class="label">Extrato não conciliado</div><div class="valor">${naoConciliados} itens</div></div>
     </div>
-    <div class="cartao">
-      <h3>Saldo inicial (data de referência)</h3>
-      <div class="form-linha">
-        <div class="campo"><label>Valor</label><input type="number" step="0.01" id="input-saldo-inicial" value="${saldoInicial}"></div>
-        <div class="campo" style="align-self:end;"><button class="btn btn-sm" onclick="salvarSaldoInicial()">Salvar saldo inicial</button></div>
-      </div>
-      <div class="ajuda" style="font-size:12px; color:var(--muted);">Usado como ponto de partida do Fluxo de Caixa Projetado.</div>
-    </div>
+    <p style="color:var(--muted); font-size:13px;">O saldo inicial de cada conta é definido na aba <b>Contas Bancárias</b>.</p>
   </div>`;
-}
-
-async function salvarSaldoInicial(){
-  const val = parseFloat(document.getElementById('input-saldo-inicial').value) || 0;
-  await supabaseClient.from('financeiro_config').upsert({chave:'saldo_inicial', valor:{valor: val}}, {onConflict:'chave'});
-  saldoInicial = val;
-  renderAba('resumo');
 }
 
 /* ================= CONTAS A PAGAR / RECEBER ================= */
@@ -375,7 +443,7 @@ function viewContas(tipo){
   const campoData = tipo==='pagar' ? 'data_pagamento' : 'data_recebimento';
   const rotuloData = tipo==='pagar' ? 'Pagamento' : 'Recebimento';
 
-  const extras = tipo==='receber' ? ['<th>Representante</th>','<th>Região</th>','<th>País</th>'] : ['<th>Banco</th>','<th>Situação</th>','<th>Plano de conta</th>'];
+  const extras = tipo==='receber' ? ['<th>Nº NF</th>','<th>Parcela</th>','<th>Representante</th>','<th>Região</th>','<th>País</th>','<th>Banco</th>'] : ['<th>Banco</th>','<th>Situação</th>','<th>Plano de conta</th>'];
   const colDocumentos = tipo==='pagar' ? '<th>Documentos</th>' : '';
   const totalColunas = 9 + extras.length + (tipo==='pagar' ? 1 : 0);
 
@@ -383,9 +451,12 @@ function viewContas(tipo){
     const status = statusConta(c, tipo);
     const automatico = !!c.origem_pedido_id;
     const extrasCel = tipo==='receber' ? `
+      <td>${escapeHtml(c.nota_fiscal_numero||'')}</td>
+      <td>${escapeHtml(c.parcela||'')}</td>
       <td>${escapeHtml(c.representante||'')}</td>
       <td>${escapeHtml(c.regiao||'')}</td>
-      <td>${escapeHtml(c.pais||'')}</td>` : `
+      <td>${escapeHtml(c.pais||'')}</td>
+      <td>${escapeHtml(c.banco||'')}</td>` : `
       <td>${escapeHtml(c.banco||'')}</td>
       <td><span class="link-marcar" onclick="alternarConfirmado('${c.id}', ${!c.confirmado})">${c.confirmado ? '<span class="badge badge-pago">Confirmado</span>' : '<span class="badge badge-pendente">Previsto</span>'}</span></td>
       <td>${escapeHtml(c.plano_conta_nome||'—')}</td>`;
@@ -410,9 +481,27 @@ function viewContas(tipo){
   }).join('');
 
   const camposExtrasForm = tipo==='receber' ? `
-        <div class="campo"><label>Representante</label><input type="text" id="novo-${tipo}-representante"></div>
-        <div class="campo"><label>Região</label><input type="text" id="novo-${tipo}-regiao"></div>
-        <div class="campo"><label>País</label><input type="text" id="novo-${tipo}-pais" value="Brasil"></div>` : `
+        <div class="campo"><label>Nº Nota Fiscal</label><input type="text" id="novo-${tipo}-nf"></div>
+        <div class="campo"><label>Parcela/Documento</label><input type="text" id="novo-${tipo}-parcela" placeholder="Ex: 1/3"></div>
+        <div class="campo"><label>Representante</label>
+          <select id="novo-${tipo}-representante">
+            <option value="">— selecione —</option>
+            ${representantesLista.map(nome=>`<option value="${escapeHtml(nome)}">${escapeHtml(nome)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="campo"><label>Região</label>
+          <select id="novo-${tipo}-regiao">
+            <option value="">— selecione —</option>
+            ${REGIOES_BR.map(r=>`<option value="${r}">${r}</option>`).join('')}
+          </select>
+        </div>
+        <div class="campo"><label>País</label><input type="text" id="novo-${tipo}-pais" value="Brasil"></div>
+        <div class="campo"><label>Banco</label>
+          <select id="novo-${tipo}-banco">
+            <option value="">— selecione —</option>
+            ${bancos.map(b=>`<option value="${escapeHtml(b.nome)}">${escapeHtml(b.nome)}</option>`).join('')}
+          </select>
+        </div>` : `
         <div class="campo"><label>Nº NF do fornecedor</label><input type="text" id="novo-${tipo}-nf-fornecedor"></div>
         <div class="campo"><label>Banco</label>
           <div style="display:flex; gap:6px;">
@@ -435,7 +524,7 @@ function viewContas(tipo){
           </label>
         </div>`;
 
-  const opcoesFormaPagamento = ["Pix","Boleto","Transferência (TED/DOC)","Cartão de crédito","Cartão de débito","Dinheiro","Cheque","Outro"]
+  const opcoesFormaPagamento = FORMAS_PAGAMENTO
     .map(o=>`<option value="${o}">${o}</option>`).join('');
 
   const opcoesGrupo = GRUPOS_DRE.map(g=>`<option value="${g}">${g}</option>`).join('');
@@ -514,9 +603,12 @@ async function adicionarConta(tipo){
     lancado_por: usuarioAtual,
   };
   if(tipo==='receber'){
+    registro.nota_fiscal_numero = document.getElementById('novo-receber-nf').value;
+    registro.parcela = document.getElementById('novo-receber-parcela').value;
     registro.representante = document.getElementById('novo-receber-representante').value;
     registro.regiao = document.getElementById('novo-receber-regiao').value;
     registro.pais = document.getElementById('novo-receber-pais').value || 'Brasil';
+    registro.banco = document.getElementById('novo-receber-banco').value;
   } else {
     registro.nota_fiscal_fornecedor = document.getElementById('novo-pagar-nf-fornecedor').value;
     registro.banco = document.getElementById('novo-pagar-banco').value;
@@ -559,26 +651,36 @@ async function removerConta(tipo, id){
 
 /* ================= FLUXO DE CAIXA PROJETADO ================= */
 function viewFluxo(){
+  const contaFiltro = filtroFluxo.conta || 'todas';
+
   const movimentos = [];
   contasReceber.forEach(c=>{
     const data = c.data_recebimento || c.vencimento;
-    if(data) movimentos.push({data, tipo:'Entrada', valor:Number(c.valor), origem:'Receber: '+(c.cliente||c.descricao||'')});
+    if(data) movimentos.push({data, tipo:'Entrada', valor:Number(c.valor), banco:c.banco||'', origem:'Receber: '+(c.cliente||c.descricao||'')});
   });
   contasPagar.forEach(c=>{
     const data = c.data_pagamento || c.vencimento;
-    if(data) movimentos.push({data, tipo:'Saída', valor:-Number(c.valor), origem:'Pagar: '+(c.fornecedor||c.descricao||'') + (c.confirmado ? '' : ' (previsto)')});
+    if(data) movimentos.push({data, tipo:'Saída', valor:-Number(c.valor), banco:c.banco||'', origem:'Pagar: '+(c.fornecedor||c.descricao||'') + (c.confirmado ? '' : ' (previsto)')});
   });
   movimentos.sort((a,b)=> a.data.localeCompare(b.data));
 
-  let saldo = saldoInicial;
-  const linhasCompletas = movimentos.map(m=>{
+  const saldoInicialEscopo = contaFiltro==='todas'
+    ? bancos.reduce((s,b)=>s+Number(b.saldo_inicial||0),0)
+    : Number((bancos.find(b=>b.nome===contaFiltro)||{}).saldo_inicial||0);
+
+  const movimentosEscopo = contaFiltro==='todas' ? movimentos : movimentos.filter(m=>m.banco===contaFiltro);
+
+  let saldo = saldoInicialEscopo;
+  const linhasCompletas = movimentosEscopo.map(m=>{
     saldo += m.valor;
     return {...m, saldoAcumulado: saldo};
   });
 
   const visiveis = linhasCompletas.filter(m=>{
-    if(filtroFluxo.modo==='entradas') return m.tipo==='Entrada';
-    if(filtroFluxo.modo==='saidas') return m.tipo==='Saída';
+    if(filtroFluxo.modo==='entradas' && m.tipo!=='Entrada') return false;
+    if(filtroFluxo.modo==='saidas' && m.tipo!=='Saída') return false;
+    if(filtroFluxo.dataInicio && m.data < filtroFluxo.dataInicio) return false;
+    if(filtroFluxo.dataFim && m.data > filtroFluxo.dataFim) return false;
     return true;
   });
 
@@ -588,16 +690,25 @@ function viewFluxo(){
       <td>${m.data}</td>
       <td>${m.tipo}</td>
       <td>${escapeHtml(m.origem)}</td>
+      <td>${escapeHtml(m.banco||'—')}</td>
       <td style="color:${cor}">${moeda(m.valor)}</td>
       <td style="font-weight:bold;">${moeda(m.saldoAcumulado)}</td>
     </tr>`;
   }).join('');
 
+  const opcoesContas = bancos.map(b=>`<option value="${escapeHtml(b.nome)}" ${contaFiltro===b.nome?'selected':''}>${escapeHtml(b.nome)}</option>`).join('');
+
   return `<div class="secao ativa">
     <h2>Fluxo de Caixa Projetado</h2>
-    <p class="desc">Saldo inicial (${moeda(saldoInicial)}) + contas a pagar/receber, ordenado por data. O saldo acumulado sempre considera entradas e saídas juntas, mesmo quando você filtra a visualização.</p>
+    <p class="desc">Saldo inicial (${moeda(saldoInicialEscopo)}) + contas a pagar/receber dessa conta, ordenado por data. O saldo acumulado sempre considera entradas e saídas juntas, mesmo quando você filtra a visualização.</p>
     <div class="cartao">
       <div class="filtros" style="margin-bottom:14px;">
+        <div class="campo-f"><label>Conta bancária</label>
+          <select id="fluxo-conta" onchange="mudarContaFluxo(this.value)">
+            <option value="todas" ${contaFiltro==='todas'?'selected':''}>Todas as contas</option>
+            ${opcoesContas}
+          </select>
+        </div>
         <div class="campo-f"><label>Ver</label>
           <select id="fluxo-modo" onchange="mudarModoFluxo(this.value)">
             <option value="ambos" ${filtroFluxo.modo==='ambos'?'selected':''}>Entradas e saídas juntas</option>
@@ -605,11 +716,14 @@ function viewFluxo(){
             <option value="saidas" ${filtroFluxo.modo==='saidas'?'selected':''}>Só saídas (a pagar)</option>
           </select>
         </div>
+        <div class="campo-f"><label>De</label><input type="date" id="fluxo-data-inicio" value="${filtroFluxo.dataInicio}"></div>
+        <div class="campo-f"><label>Até</label><input type="date" id="fluxo-data-fim" value="${filtroFluxo.dataFim}"></div>
+        <div class="campo-f"><button class="btn btn-sm" onclick="aplicarDatasFluxo()">Aplicar datas</button></div>
       </div>
       <div style="overflow-x:auto;">
         <table class="dyn">
-          <thead><tr><th>Data</th><th>Tipo</th><th>Origem</th><th>Valor</th><th>Saldo acumulado</th></tr></thead>
-          <tbody>${linhasHtml || `<tr><td colspan="5" style="color:var(--muted); padding:16px 8px;">Sem lançamentos com data ainda.</td></tr>`}</tbody>
+          <thead><tr><th>Data</th><th>Tipo</th><th>Origem</th><th>Conta</th><th>Valor</th><th>Saldo acumulado</th></tr></thead>
+          <tbody>${linhasHtml || `<tr><td colspan="6" style="color:var(--muted); padding:16px 8px;">Sem lançamentos com data ainda.</td></tr>`}</tbody>
         </table>
       </div>
     </div>
@@ -621,36 +735,177 @@ function mudarModoFluxo(valor){
   renderAba('fluxo');
 }
 
-/* ================= CONCILIAÇÃO BANCÁRIA ================= */
-function viewConciliacao(){
-  const naoConciliados = extrato.filter(e=>!e.conciliado);
-  const conciliados = extrato.filter(e=>e.conciliado);
+function mudarContaFluxo(valor){
+  filtroFluxo.conta = valor;
+  renderAba('fluxo');
+}
 
-  const totalEntradaExtrato = extrato.filter(e=>e.tipo==='Entrada').reduce((s,e)=>s+Number(e.valor),0);
-  const totalSaidaExtrato = extrato.filter(e=>e.tipo==='Saída').reduce((s,e)=>s+Number(e.valor),0);
-  const totalRecebidoSistema = contasReceber.filter(c=>c.data_recebimento).reduce((s,c)=>s+Number(c.valor),0);
-  const totalPagoSistema = contasPagar.filter(c=>c.data_pagamento).reduce((s,c)=>s+Number(c.valor),0);
+function aplicarDatasFluxo(){
+  filtroFluxo.dataInicio = document.getElementById('fluxo-data-inicio').value || '';
+  filtroFluxo.dataFim = document.getElementById('fluxo-data-fim').value || '';
+  renderAba('fluxo');
+}
+
+/* ================= CONCILIAÇÃO BANCÁRIA ================= */
+let filtroConciliacao = { conta: 'todas' };
+let conciliacaoMultiplaAberta = null;
+let conciliacaoMultiplaSelecionadas = new Set();
+
+function alternarConciliacaoMultipla(extratoId){
+  if(conciliacaoMultiplaAberta === extratoId){
+    conciliacaoMultiplaAberta = null;
+  } else {
+    conciliacaoMultiplaAberta = extratoId;
+    conciliacaoMultiplaSelecionadas = new Set();
+  }
+  renderAba('conciliacao');
+}
+
+function alternarSelecaoMultipla(contaId){
+  if(conciliacaoMultiplaSelecionadas.has(contaId)) conciliacaoMultiplaSelecionadas.delete(contaId);
+  else conciliacaoMultiplaSelecionadas.add(contaId);
+  renderAba('conciliacao');
+}
+
+function renderPainelConciliacaoMultipla(e, pool, tabela){
+  const somaSelecionada = pool
+    .filter(c=>conciliacaoMultiplaSelecionadas.has(c.id))
+    .reduce((s,c)=>s+Number(c.valor),0);
+  const bateExato = Math.abs(somaSelecionada - Number(e.valor)) < 0.01;
+
+  const linhas = pool.map(c=>{
+    const marcado = conciliacaoMultiplaSelecionadas.has(c.id);
+    return `<tr>
+      <td><input type="checkbox" ${marcado?'checked':''} onchange="alternarSelecaoMultipla('${c.id}')"></td>
+      <td>${escapeHtml(c.cliente||c.fornecedor||c.descricao||'')}</td>
+      <td>${c.vencimento||''}</td>
+      <td>${moeda(c.valor)}</td>
+    </tr>`;
+  }).join('');
+
+  return `<div style="background:#FBF8F2; border:1px solid #E7DFCC; border-radius:6px; padding:12px 14px; margin-top:10px;">
+    <p style="font-size:12.5px; color:var(--muted); margin:0 0 8px;">Marque as contas que juntas formam esse crédito (ex: várias vendas caindo num só depósito de maquininha ou boleto em lote).</p>
+    <div style="overflow-x:auto; max-height:220px; overflow-y:auto;">
+      <table class="dyn">
+        <thead><tr><th></th><th>Cliente/Fornecedor</th><th>Vencimento</th><th>Valor</th></tr></thead>
+        <tbody>${linhas || `<tr><td colspan="4" style="color:var(--muted); padding:10px;">Nenhuma pendência disponível.</td></tr>`}</tbody>
+      </table>
+    </div>
+    <div style="display:flex; align-items:center; gap:14px; margin-top:10px;">
+      <span>Selecionado: <b style="color:${bateExato?'var(--ok)':'var(--danger)'};">${moeda(somaSelecionada)}</b> de ${moeda(e.valor)}</span>
+      <button class="btn btn-sm" ${bateExato?'':'disabled'} onclick="confirmarConciliacaoMultipla('${e.id}','${tabela}')">Confirmar conciliação em bloco</button>
+    </div>
+  </div>`;
+}
+
+async function confirmarConciliacaoMultipla(extratoId, tabela){
+  const linhaExtrato = extrato.find(e=>e.id===extratoId);
+  const tabelaNome = tabela === 'receber' ? 'contas_receber' : 'contas_pagar';
+  const campoData = tabela === 'receber' ? 'data_recebimento' : 'data_pagamento';
+  const dataConciliacao = linhaExtrato ? linhaExtrato.data : hojeISO();
+
+  for(const contaId of conciliacaoMultiplaSelecionadas){
+    const atualizacao = { [campoData]: dataConciliacao };
+    if(tabela === 'pagar') atualizacao.confirmado = true;
+    await supabaseClient.from(tabelaNome).update(atualizacao).eq('id', contaId);
+  }
+  await supabaseClient.from('extrato_bancario').update({conciliado:true}).eq('id', extratoId);
+
+  conciliacaoMultiplaAberta = null;
+  conciliacaoMultiplaSelecionadas = new Set();
+  await carregarTudo();
+  renderAba('conciliacao');
+}
+
+function viewConciliacao(){
+  const contaFiltro = filtroConciliacao.conta || 'todas';
+  const extratoEscopo = contaFiltro==='todas' ? extrato : extrato.filter(e=>e.banco===contaFiltro);
+  const receberEscopo = contaFiltro==='todas' ? contasReceber : contasReceber.filter(c=>c.banco===contaFiltro);
+  const pagarEscopo = contaFiltro==='todas' ? contasPagar : contasPagar.filter(c=>c.banco===contaFiltro);
+
+  const naoConciliados = extratoEscopo.filter(e=>!e.conciliado);
+  const conciliados = extratoEscopo.filter(e=>e.conciliado);
+
+  const totalEntradaExtrato = extratoEscopo.filter(e=>e.tipo==='Entrada').reduce((s,e)=>s+Number(e.valor),0);
+  const totalSaidaExtrato = extratoEscopo.filter(e=>e.tipo==='Saída').reduce((s,e)=>s+Number(e.valor),0);
+  const totalRecebidoSistema = receberEscopo.filter(c=>c.data_recebimento).reduce((s,c)=>s+Number(c.valor),0);
+  const totalPagoSistema = pagarEscopo.filter(c=>c.data_pagamento).reduce((s,c)=>s+Number(c.valor),0);
 
   const itensPendentes = naoConciliados.map(e=>{
-    const candidatos = tipo => (tipo==='Entrada' ? contasReceber.filter(c=>c.data_recebimento && !c._usado) : contasPagar.filter(c=>c.data_pagamento && !c._usado));
-    let sugestao = null;
-    const pool = e.tipo==='Entrada' ? contasReceber.filter(c=>c.data_recebimento) : contasPagar.filter(c=>c.data_pagamento);
-    sugestao = pool.find(c=> Math.abs(Number(c.valor) - Number(e.valor)) < 0.01 );
+    const pool = e.tipo==='Entrada' ? receberEscopo.filter(c=>!c.data_recebimento) : pagarEscopo.filter(c=>!c.data_pagamento);
+    const sugestao = pool.find(c=> Math.abs(Number(c.valor) - Number(e.valor)) < 0.01 );
+    const tabela = e.tipo==='Entrada' ? 'receber' : 'pagar';
+
+    const painelMultiplo = conciliacaoMultiplaAberta === e.id ? renderPainelConciliacaoMultipla(e, pool, tabela) : '';
 
     return `<div class="item-extrato">
-      <div><b>${e.data}</b> · ${escapeHtml(e.descricao||'')}
+      <div><b>${e.data}</b> · ${escapeHtml(e.descricao||'')} ${e.banco ? `· <span style="color:var(--muted);">${escapeHtml(e.banco)}</span>`:''}
         <span class="tag-tipo ${e.tipo==='Entrada'?'tag-entrada':'tag-saida'}">${e.tipo}</span>
         <span style="float:right; font-weight:bold;">${moeda(e.valor)}</span>
       </div>
-      ${sugestao ? `<div class="sugestao">Possível correspondência: ${escapeHtml(sugestao.cliente||sugestao.fornecedor||sugestao.descricao||'')} — ${moeda(sugestao.valor)}
-        <span class="link-marcar" onclick="confirmarConciliacao('${e.id}')">confirmar conciliação</span></div>`
-      : `<div class="sugestao" style="color:var(--muted);">Sem correspondência automática — <span class="link-marcar" onclick="confirmarConciliacao('${e.id}')">marcar como conciliado mesmo assim</span></div>`}
+      <div class="sugestao" style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <span style="color:${sugestao?'var(--ok)':'var(--muted)'};">
+          ${sugestao ? `Bate com pendência: ${escapeHtml(sugestao.cliente||sugestao.fornecedor||sugestao.descricao||'')} — ${moeda(sugestao.valor)}` : 'Nenhuma pendência do sistema com esse valor'}
+        </span>
+        <span>
+          ${sugestao ? `<button class="btn btn-sm" onclick="confirmarConciliacao('${e.id}','${sugestao.id}','${tabela}')">Conciliar</button>` : ''}
+          <button class="btn btn-sm btn-ghost" onclick="alternarConciliacaoMultipla('${e.id}')">${conciliacaoMultiplaAberta===e.id ? 'Fechar' : 'Conciliar com várias contas'}</button>
+          ${!sugestao ? `<button class="btn btn-sm btn-ghost" onclick="confirmarConciliacao('${e.id}', null, null)">Marcar conciliado mesmo assim</button>` : ''}
+        </span>
+      </div>
+      ${painelMultiplo}
     </div>`;
   }).join('');
 
+  const opcoesContas = bancos.map(b=>`<option value="${escapeHtml(b.nome)}" ${contaFiltro===b.nome?'selected':''}>${escapeHtml(b.nome)}</option>`).join('');
+  const opcoesContasForm = bancos.map(b=>`<option value="${escapeHtml(b.nome)}">${escapeHtml(b.nome)}</option>`).join('');
+
+  // Comparação lado a lado, só faz sentido quando uma conta específica está selecionada
+  let comparacaoHtml = '';
+  if(contaFiltro !== 'todas'){
+    const extratoNaoConciliadoConta = extratoEscopo.filter(e=>!e.conciliado);
+    const sistemaConta = [
+      ...receberEscopo.filter(c=>c.data_recebimento).map(c=>({data:c.data_recebimento, desc:c.cliente||c.descricao||'', valor:Number(c.valor), tipo:'Entrada'})),
+      ...pagarEscopo.filter(c=>c.data_pagamento).map(c=>({data:c.data_pagamento, desc:c.fornecedor||c.descricao||'', valor:Number(c.valor), tipo:'Saída'})),
+    ].sort((a,b)=> (a.data||'').localeCompare(b.data||''));
+
+    comparacaoHtml = `<div class="cartao">
+      <h3>Extrato x Sistema — ${escapeHtml(contaFiltro)}</h3>
+      <div class="conciliacao-col">
+        <div>
+          <h4>No extrato, ainda não conciliado</h4>
+          ${extratoNaoConciliadoConta.map(e=>`<div class="item-extrato">
+            <b>${e.data}</b> · ${escapeHtml(e.descricao||'')}
+            <span class="tag-tipo ${e.tipo==='Entrada'?'tag-entrada':'tag-saida'}">${e.tipo}</span>
+            <span style="float:right; font-weight:bold;">${moeda(e.valor)}</span>
+          </div>`).join('') || `<p style="color:var(--muted); font-size:13px;">Nada pendente.</p>`}
+        </div>
+        <div>
+          <h4>No sistema (pago/recebido)</h4>
+          ${sistemaConta.map(s=>`<div class="item-extrato">
+            <b>${s.data}</b> · ${escapeHtml(s.desc)}
+            <span class="tag-tipo ${s.tipo==='Entrada'?'tag-entrada':'tag-saida'}">${s.tipo}</span>
+            <span style="float:right; font-weight:bold;">${moeda(s.valor)}</span>
+          </div>`).join('') || `<p style="color:var(--muted); font-size:13px;">Nada lançado ainda.</p>`}
+        </div>
+      </div>
+    </div>`;
+  }
+
   return `<div class="secao ativa">
     <h2>Conciliação Bancária</h2>
-    <p class="desc">Compare o extrato do banco com os lançamentos do sistema.</p>
+    <p class="desc">Compare o extrato do banco com os lançamentos do sistema, conta por conta.</p>
+
+    <div class="cartao">
+      <div class="filtros">
+        <div class="campo-f"><label>Conta bancária</label>
+          <select id="conciliacao-conta" onchange="mudarContaConciliacao(this.value)">
+            <option value="todas" ${contaFiltro==='todas'?'selected':''}>Todas as contas</option>
+            ${opcoesContas}
+          </select>
+        </div>
+      </div>
+    </div>
 
     <div class="kpis">
       <div class="kpi"><div class="label">Entradas no extrato</div><div class="valor">${moeda(totalEntradaExtrato)}</div></div>
@@ -660,7 +915,26 @@ function viewConciliacao(){
     </div>
 
     <div class="cartao">
+      <h3>Importar Extrato Bancário</h3>
+      <p class="ajuda" style="font-size:12px; color:var(--muted); margin-top:0;">Aceita arquivos <b>OFX</b> (o formato padrão que a maioria dos bancos oferece pra baixar) ou <b>CSV</b>. Em vez de digitar linha por linha, o sistema lê o arquivo e já sugere os lançamentos.</p>
+      <div class="form-linha">
+        <div class="campo"><label>Conta bancária desse extrato</label>
+          <select id="import-banco">
+            <option value="">— selecione —</option>
+            ${opcoesContasForm}
+          </select>
+        </div>
+        <div class="campo"><label>Arquivo (.ofx ou .csv)</label><input type="file" id="import-arquivo" accept=".ofx,.csv,.txt"></div>
+        <div class="campo" style="align-self:end;"><button class="btn btn-sm" onclick="processarArquivoImportacao()">Processar arquivo</button></div>
+      </div>
+      <span class="msg" id="msg-importar"></span>
+      <div id="area-mapeamento-csv"></div>
+      <div id="area-previa-importacao"></div>
+    </div>
+
+    <div class="cartao">
       <h3>Adicionar lançamento do extrato</h3>
+      <p class="ajuda" style="font-size:12px; color:var(--muted); margin-top:0;">Use isso quando o lançamento <b>já existe</b> em Contas a Pagar/Receber (pendente) — depois é só clicar em "Conciliar" na lista abaixo, que ele bate com a pendência e marca como pago/recebido.</p>
       <div class="form-linha">
         <div class="campo"><label>Data</label><input type="date" id="extrato-data"></div>
         <div class="campo"><label>Descrição</label><input type="text" id="extrato-descricao"></div>
@@ -668,10 +942,50 @@ function viewConciliacao(){
           <select id="extrato-tipo"><option value="Entrada">Entrada</option><option value="Saída">Saída</option></select>
         </div>
         <div class="campo"><label>Valor</label><input type="number" step="0.01" id="extrato-valor"></div>
+        <div class="campo"><label>Conta bancária</label>
+          <select id="extrato-banco">
+            <option value="">— selecione —</option>
+            ${opcoesContasForm}
+          </select>
+        </div>
       </div>
       <button class="btn" onclick="adicionarExtrato()">Adicionar</button>
       <span class="msg" id="msg-extrato"></span>
-      <div class="ajuda" style="font-size:12px; color:var(--muted); margin-top:8px;">Dica: lance aqui linha a linha copiando do extrato do banco (data, descrição, valor, entrada ou saída).</div>
+    </div>
+
+    <div class="cartao">
+      <h3>Lançar algo que não existe ainda no sistema</h3>
+      <p class="ajuda" style="font-size:12px; color:var(--muted); margin-top:0;">Use isso só quando o extrato mostra algo que <b>nunca foi lançado</b> (ex: taxa do banco, tarifa). Isso cria a conta já classificada, já paga/recebida, e já conciliada — tudo de uma vez.</p>
+      <div class="form-linha">
+        <div class="campo"><label>Data</label><input type="date" id="novo-extrato-data"></div>
+        <div class="campo"><label>Tipo</label>
+          <select id="novo-extrato-tipo"><option value="Entrada">Entrada</option><option value="Saída">Saída</option></select>
+        </div>
+        <div class="campo"><label>Fornecedor/Cliente</label><input type="text" id="novo-extrato-parte"></div>
+        <div class="campo"><label>Descrição</label><input type="text" id="novo-extrato-descricao"></div>
+        <div class="campo"><label>Categoria</label><input type="text" id="novo-extrato-categoria"></div>
+        <div class="campo"><label>Grupo (DRE)</label>
+          <select id="novo-extrato-grupo">${GRUPOS_DRE.map(g=>`<option value="${g}">${g}</option>`).join('')}</select>
+        </div>
+        <div class="campo"><label>Valor</label><input type="number" step="0.01" id="novo-extrato-valor"></div>
+        <div class="campo"><label>Forma</label>
+          <select id="novo-extrato-forma">${FORMAS_PAGAMENTO.map(o=>`<option value="${o}">${o}</option>`).join('')}</select>
+        </div>
+        <div class="campo"><label>Conta bancária</label>
+          <select id="novo-extrato-banco">
+            <option value="">— selecione —</option>
+            ${opcoesContasForm}
+          </select>
+        </div>
+        <div class="campo"><label>Plano de conta (se for saída)</label>
+          <select id="novo-extrato-planoconta">
+            <option value="">— nenhum —</option>
+            ${orcamentoContas.map(c=>`<option value="${c.id}" data-nome="${escapeHtml(c.conta||'')}">${escapeHtml(c.conta||'(sem nome)')}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <button class="btn" onclick="criarEConciliarNovo()">Lançar e conciliar</button>
+      <span class="msg" id="msg-novo-extrato"></span>
     </div>
 
     <div class="cartao">
@@ -679,23 +993,219 @@ function viewConciliacao(){
       ${itensPendentes || `<p style="color:var(--muted);">Tudo conciliado.</p>`}
     </div>
 
+    ${comparacaoHtml}
+
     <div class="cartao">
       <h3>Já conciliados (${conciliados.length})</h3>
       <div style="overflow-x:auto;">
         <table class="dyn">
-          <thead><tr><th>Data</th><th>Descrição</th><th>Tipo</th><th>Valor</th><th></th></tr></thead>
+          <thead><tr><th>Data</th><th>Descrição</th><th>Conta</th><th>Tipo</th><th>Valor</th><th></th></tr></thead>
           <tbody>
           ${conciliados.map(e=>`<tr>
             <td>${e.data}</td><td>${escapeHtml(e.descricao||'')}</td>
+            <td>${escapeHtml(e.banco||'')}</td>
             <td><span class="tag-tipo ${e.tipo==='Entrada'?'tag-entrada':'tag-saida'}">${e.tipo}</span></td>
             <td>${moeda(e.valor)}</td>
             <td><span class="link-remover" onclick="removerExtrato('${e.id}')" title="Remover">✕</span></td>
-          </tr>`).join('') || `<tr><td colspan="5" style="color:var(--muted); padding:12px 8px;">Nada ainda.</td></tr>`}
+          </tr>`).join('') || `<tr><td colspan="6" style="color:var(--muted); padding:12px 8px;">Nada ainda.</td></tr>`}
           </tbody>
         </table>
       </div>
     </div>
   </div>`;
+}
+
+function mudarContaConciliacao(valor){
+  filtroConciliacao.conta = valor;
+  renderAba('conciliacao');
+}
+
+/* ================= IMPORTAÇÃO DE EXTRATO (OFX / CSV) ================= */
+let transacoesImportadas = []; // [{data, descricao, valor, tipo, incluir}]
+let cabecalhoCsvBruto = null;
+let linhasCsvBrutas = null;
+
+function processarArquivoImportacao(){
+  const bancoSelecionado = document.getElementById('import-banco').value;
+  const arquivoInput = document.getElementById('import-arquivo');
+  const msg = document.getElementById('msg-importar');
+  msg.textContent = ''; msg.className = 'msg';
+
+  if(!bancoSelecionado){ msg.textContent = 'Selecione a conta bancária desse extrato.'; msg.className = 'msg erro'; return; }
+  const arquivo = arquivoInput.files[0];
+  if(!arquivo){ msg.textContent = 'Escolha um arquivo.'; msg.className = 'msg erro'; return; }
+
+  const leitor = new FileReader();
+  leitor.onload = (e) => {
+    const conteudo = e.target.result;
+    const nomeArquivo = arquivo.name.toLowerCase();
+    if(nomeArquivo.endsWith('.ofx')){
+      transacoesImportadas = parsearOFX(conteudo);
+      mostrarPreviaImportacao();
+    } else {
+      // CSV ou TXT
+      const delimitador = (conteudo.split('\n')[0].split(';').length > conteudo.split('\n')[0].split(',').length) ? ';' : ',';
+      const linhas = conteudo.split(/\r?\n/).filter(l=>l.trim().length>0).map(l=>l.split(delimitador).map(c=>c.trim().replace(/^"|"$/g,'')));
+      cabecalhoCsvBruto = linhas[0];
+      linhasCsvBrutas = linhas.slice(1);
+      const indices = detectarColunasCsv(cabecalhoCsvBruto);
+      if(indices.data===-1 || indices.descricao===-1 || indices.valor===-1){
+        mostrarMapeamentoCsv(cabecalhoCsvBruto);
+      } else {
+        transacoesImportadas = converterCsvParaTransacoes(linhasCsvBrutas, indices);
+        mostrarPreviaImportacao();
+      }
+    }
+  };
+  leitor.readAsText(arquivo, 'ISO-8859-1');
+}
+
+function parsearOFX(texto){
+  const blocos = texto.match(/<STMTTRN>[\s\S]*?<\/STMTTRN>/g) || [];
+  return blocos.map(bloco=>{
+    const pegar = (tag) => {
+      const m = bloco.match(new RegExp(`<${tag}>([^<\r\n]*)`));
+      return m ? m[1].trim() : '';
+    };
+    const dataBruta = pegar('DTPOSTED').slice(0,8); // AAAAMMDD
+    const data = dataBruta.length===8 ? `${dataBruta.slice(0,4)}-${dataBruta.slice(4,6)}-${dataBruta.slice(6,8)}` : '';
+    let valor = parseFloat(pegar('TRNAMT').replace(',','.')) || 0;
+    const descricao = pegar('MEMO') || pegar('NAME') || '(sem descrição)';
+    return {
+      data,
+      descricao,
+      valor: Math.abs(valor),
+      tipo: valor >= 0 ? 'Entrada' : 'Saída',
+      incluir: true,
+    };
+  }).filter(t=>t.data);
+}
+
+function detectarColunasCsv(cabecalho){
+  const norm = s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const cab = cabecalho.map(norm);
+  const achar = (opcoes) => cab.findIndex(c => opcoes.some(o=>c.includes(o)));
+  return {
+    data: achar(['data','date']),
+    descricao: achar(['descricao','historico','memo','description']),
+    valor: achar(['valor','value','amount','montante']),
+  };
+}
+
+function converterCsvParaTransacoes(linhas, indices){
+  return linhas.map(cols=>{
+    let dataBruta = (cols[indices.data]||'').trim();
+    let data = '';
+    if(/^\d{4}-\d{2}-\d{2}/.test(dataBruta)) data = dataBruta.slice(0,10);
+    else {
+      const m = dataBruta.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+      if(m){
+        let [,d,mes,ano] = m;
+        if(ano.length===2) ano = '20'+ano;
+        data = `${ano}-${mes.padStart(2,'0')}-${d.padStart(2,'0')}`;
+      }
+    }
+    const descricao = (cols[indices.descricao]||'').trim() || '(sem descrição)';
+    let valorTexto = (cols[indices.valor]||'0').replace(/[R$\s]/g,'');
+    if(valorTexto.includes(',')) valorTexto = valorTexto.replace(/\./g,'').replace(',','.');
+    const valor = parseFloat(valorTexto) || 0;
+    return {
+      data, descricao,
+      valor: Math.abs(valor),
+      tipo: valor >= 0 ? 'Entrada' : 'Saída',
+      incluir: true,
+    };
+  }).filter(t=>t.data);
+}
+
+function mostrarMapeamentoCsv(cabecalho){
+  const area = document.getElementById('area-mapeamento-csv');
+  const opcoes = cabecalho.map((h,i)=>`<option value="${i}">${escapeHtml(h||'(coluna '+(i+1)+')')}</option>`).join('');
+  area.innerHTML = `
+    <div class="cartao" style="margin-top:14px;">
+      <h4 style="margin-top:0;">Não identifiquei as colunas automaticamente — selecione qual é qual:</h4>
+      <div class="form-linha">
+        <div class="campo"><label>Coluna da data</label><select id="map-data">${opcoes}</select></div>
+        <div class="campo"><label>Coluna da descrição</label><select id="map-descricao">${opcoes}</select></div>
+        <div class="campo"><label>Coluna do valor</label><select id="map-valor">${opcoes}</select></div>
+        <div class="campo" style="align-self:end;"><button class="btn btn-sm" onclick="confirmarMapeamentoCsv()">Gerar prévia</button></div>
+      </div>
+    </div>`;
+}
+
+function confirmarMapeamentoCsv(){
+  const indices = {
+    data: parseInt(document.getElementById('map-data').value,10),
+    descricao: parseInt(document.getElementById('map-descricao').value,10),
+    valor: parseInt(document.getElementById('map-valor').value,10),
+  };
+  transacoesImportadas = converterCsvParaTransacoes(linhasCsvBrutas, indices);
+  document.getElementById('area-mapeamento-csv').innerHTML = '';
+  mostrarPreviaImportacao();
+}
+
+function mostrarPreviaImportacao(){
+  const area = document.getElementById('area-previa-importacao');
+  const msg = document.getElementById('msg-importar');
+  if(transacoesImportadas.length === 0){
+    area.innerHTML = '';
+    msg.textContent = 'Não consegui reconhecer nenhum lançamento nesse arquivo.';
+    msg.className = 'msg erro';
+    return;
+  }
+  msg.textContent = `${transacoesImportadas.length} lançamentos encontrados — revise abaixo antes de importar.`;
+  msg.className = 'msg ok';
+
+  const linhas = transacoesImportadas.map((t,i)=>`
+    <tr>
+      <td><input type="checkbox" ${t.incluir?'checked':''} onchange="transacoesImportadas[${i}].incluir=this.checked"></td>
+      <td>${t.data}</td>
+      <td>${escapeHtml(t.descricao)}</td>
+      <td><span class="tag-tipo ${t.tipo==='Entrada'?'tag-entrada':'tag-saida'}">${t.tipo}</span></td>
+      <td>${moeda(t.valor)}</td>
+    </tr>`).join('');
+
+  area.innerHTML = `
+    <div class="cartao" style="margin-top:14px;">
+      <h4 style="margin-top:0;">Prévia da importação (${transacoesImportadas.length})</h4>
+      <div style="overflow-x:auto; max-height:340px; overflow-y:auto;">
+        <table class="dyn">
+          <thead><tr><th></th><th>Data</th><th>Descrição</th><th>Tipo</th><th>Valor</th></tr></thead>
+          <tbody>${linhas}</tbody>
+        </table>
+      </div>
+      <button class="btn" style="margin-top:12px;" onclick="confirmarImportacao()">Importar selecionados</button>
+      <span class="msg" id="msg-confirmar-importacao"></span>
+    </div>`;
+}
+
+async function confirmarImportacao(){
+  const bancoSelecionado = document.getElementById('import-banco').value;
+  const msg = document.getElementById('msg-confirmar-importacao');
+  const selecionadas = transacoesImportadas.filter(t=>t.incluir);
+  if(selecionadas.length===0){ msg.textContent='Nenhum item selecionado.'; msg.className='msg erro'; return; }
+
+  msg.textContent = 'Importando...'; msg.className = 'msg';
+
+  // Evita duplicar: pula linhas que já existem (mesma data + valor + tipo + banco)
+  let importadas = 0, ignoradas = 0;
+  for(const t of selecionadas){
+    const jaExiste = extrato.some(e => e.banco===bancoSelecionado && e.data===t.data && e.tipo===t.tipo && Math.abs(Number(e.valor)-t.valor) < 0.01);
+    if(jaExiste){ ignoradas++; continue; }
+    const { error } = await supabaseClient.from('extrato_bancario').insert({
+      data: t.data, descricao: t.descricao, tipo: t.tipo, valor: t.valor,
+      banco: bancoSelecionado, conciliado: false, lancado_por: usuarioAtual,
+    });
+    if(!error) importadas++;
+  }
+
+  transacoesImportadas = [];
+  document.getElementById('area-previa-importacao').innerHTML = '';
+  document.getElementById('import-arquivo').value = '';
+  await carregarTudo();
+  renderAba('conciliacao');
+  const msgFinal = document.getElementById('msg-importar');
+  if(msgFinal) { msgFinal.textContent = `${importadas} importados, ${ignoradas} ignorados (já existiam).`; msgFinal.className = 'msg ok'; }
 }
 
 async function adicionarExtrato(){
@@ -704,6 +1214,7 @@ async function adicionarExtrato(){
     descricao: document.getElementById('extrato-descricao').value,
     tipo: document.getElementById('extrato-tipo').value,
     valor: parseFloat(document.getElementById('extrato-valor').value) || 0,
+    banco: document.getElementById('extrato-banco').value,
     conciliado: false,
     lancado_por: usuarioAtual,
   };
@@ -715,7 +1226,58 @@ async function adicionarExtrato(){
   renderAba('conciliacao');
 }
 
-async function confirmarConciliacao(extratoId){
+async function criarEConciliarNovo(){
+  const data = document.getElementById('novo-extrato-data').value || null;
+  const tipo = document.getElementById('novo-extrato-tipo').value;
+  const parte = document.getElementById('novo-extrato-parte').value;
+  const descricao = document.getElementById('novo-extrato-descricao').value;
+  const categoria = document.getElementById('novo-extrato-categoria').value;
+  const grupo_dre = document.getElementById('novo-extrato-grupo').value;
+  const valor = parseFloat(document.getElementById('novo-extrato-valor').value) || 0;
+  const forma = document.getElementById('novo-extrato-forma').value;
+  const banco = document.getElementById('novo-extrato-banco').value;
+  const selPlano = document.getElementById('novo-extrato-planoconta');
+  const msg = document.getElementById('msg-novo-extrato');
+
+  if(tipo === 'Saída'){
+    const { error } = await supabaseClient.from('contas_pagar').insert({
+      fornecedor: parte, descricao, categoria, grupo_dre,
+      valor, vencimento: data, data_pagamento: data,
+      forma_pagamento: forma, banco, confirmado: true,
+      plano_conta_id: selPlano.value || null,
+      plano_conta_nome: selPlano.value ? selPlano.options[selPlano.selectedIndex].dataset.nome : null,
+      origem: 'Conciliação', lancado_por: usuarioAtual,
+    });
+    if(error){ msg.textContent='Erro ao salvar'; msg.className='msg ver erro'; console.error(error); return; }
+  } else {
+    const { error } = await supabaseClient.from('contas_receber').insert({
+      cliente: parte, descricao, categoria, grupo_dre,
+      valor, vencimento: data, data_recebimento: data,
+      forma_pagamento: forma, banco,
+      origem: 'Conciliação', lancado_por: usuarioAtual,
+    });
+    if(error){ msg.textContent='Erro ao salvar'; msg.className='msg ver erro'; console.error(error); return; }
+  }
+
+  const { error: erroExtrato } = await supabaseClient.from('extrato_bancario').insert({
+    data, descricao, tipo, valor, banco, conciliado: true, lancado_por: usuarioAtual,
+  });
+  if(erroExtrato){ msg.textContent='Lançamento criado, mas erro ao salvar o extrato'; msg.className='msg ver erro'; console.error(erroExtrato); return; }
+
+  msg.textContent='Lançado e conciliado ✓'; msg.className='msg ver ok';
+  await carregarTudo();
+  renderAba('conciliacao');
+}
+
+async function confirmarConciliacao(extratoId, contaId, tabela){
+  if(contaId && tabela){
+    const linhaExtrato = extrato.find(e=>e.id===extratoId);
+    const tabelaNome = tabela === 'receber' ? 'contas_receber' : 'contas_pagar';
+    const campoData = tabela === 'receber' ? 'data_recebimento' : 'data_pagamento';
+    const atualizacao = { [campoData]: linhaExtrato ? linhaExtrato.data : hojeISO() };
+    if(tabela === 'pagar') atualizacao.confirmado = true;
+    await supabaseClient.from(tabelaNome).update(atualizacao).eq('id', contaId);
+  }
   await supabaseClient.from('extrato_bancario').update({conciliado:true}).eq('id', extratoId);
   await carregarTudo();
   renderAba('conciliacao');
@@ -781,13 +1343,35 @@ function viewRelatorio(tipo){
     </tr>`;
   }).join('');
 
+  const paisesDisponiveis = Array.from(new Set(['Brasil', ...contasReceber.map(c=>c.pais).filter(Boolean)]));
+
   const filtrosExtras = tipo==='receber' ? `
-    <div class="campo-f"><label>Representante</label><input type="text" id="filtro-${tipo}-representante" value="${escapeHtml(f.representante)}"></div>
-    <div class="campo-f"><label>Região</label><input type="text" id="filtro-${tipo}-regiao" value="${escapeHtml(f.regiao)}"></div>
-    <div class="campo-f"><label>País</label><input type="text" id="filtro-${tipo}-pais" value="${escapeHtml(f.pais)}"></div>` : `
+    <div class="campo-f"><label>Representante</label>
+      <select id="filtro-${tipo}-representante">
+        <option value="">Todos</option>
+        ${representantesLista.map(nome=>`<option value="${escapeHtml(nome)}" ${f.representante===nome?'selected':''}>${escapeHtml(nome)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="campo-f"><label>Região</label>
+      <select id="filtro-${tipo}-regiao">
+        <option value="">Todas</option>
+        ${REGIOES_BR.map(r=>`<option value="${r}" ${f.regiao===r?'selected':''}>${r}</option>`).join('')}
+      </select>
+    </div>
+    <div class="campo-f"><label>País</label>
+      <select id="filtro-${tipo}-pais">
+        <option value="">Todos</option>
+        ${paisesDisponiveis.map(p=>`<option value="${escapeHtml(p)}" ${f.pais===p?'selected':''}>${escapeHtml(p)}</option>`).join('')}
+      </select>
+    </div>` : `
     <div class="campo-f"><label>Fornecedor</label><input type="text" id="filtro-${tipo}-fornecedor" value="${escapeHtml(f.fornecedor)}"></div>
     <div class="campo-f"><label>Categoria</label><input type="text" id="filtro-${tipo}-categoria" value="${escapeHtml(f.categoria)}"></div>
-    <div class="campo-f"><label>Banco</label><input type="text" id="filtro-${tipo}-banco" value="${escapeHtml(f.banco)}"></div>
+    <div class="campo-f"><label>Banco</label>
+      <select id="filtro-${tipo}-banco">
+        <option value="">Todos</option>
+        ${bancos.map(b=>`<option value="${escapeHtml(b.nome)}" ${f.banco===b.nome?'selected':''}>${escapeHtml(b.nome)}</option>`).join('')}
+      </select>
+    </div>
     <div class="campo-f"><label>Situação</label>
       <select id="filtro-${tipo}-situacao">
         <option value="" ${!f.situacao?'selected':''}>Todas</option>
@@ -803,7 +1387,12 @@ function viewRelatorio(tipo){
     <div class="cartao">
       <div class="filtros">
         ${filtrosExtras}
-        <div class="campo-f"><label>Forma de ${tipo==='receber'?'recebimento':'pagamento'}</label><input type="text" id="filtro-${tipo}-forma" value="${escapeHtml(f.forma)}"></div>
+        <div class="campo-f"><label>Forma de ${tipo==='receber'?'recebimento':'pagamento'}</label>
+          <select id="filtro-${tipo}-forma">
+            <option value="">Todas</option>
+            ${FORMAS_PAGAMENTO.map(o=>`<option value="${o}" ${f.forma===o?'selected':''}>${o}</option>`).join('')}
+          </select>
+        </div>
         <div class="campo-f"><label>Status</label>
           <select id="filtro-${tipo}-status">
             <option value="" ${!f.status?'selected':''}>Todos</option>
@@ -899,6 +1488,26 @@ function definirPeriodoRapido(tipo){
   renderAba(abaAtiva);
 }
 
+let dreDetalheAberto = null;
+
+function lancamentosDoGrupoDRE(key, receber, pagar){
+  const mapReceber = c => ({data:c.data_recebimento, parte:c.cliente, desc:c.descricao, valor:Number(c.valor)});
+  const mapPagar = c => ({data:c.data_pagamento, parte:c.fornecedor, desc:c.descricao, valor:Number(c.valor)});
+  switch(key){
+    case 'receitaBruta': return receber.filter(c=>(c.grupo_dre||'Outro')==='Receita').map(mapReceber);
+    case 'deducoes': return [
+      ...receber.filter(c=>(c.grupo_dre||'Outro')==='Dedução de Receita').map(mapReceber),
+      ...pagar.filter(c=>(c.grupo_dre||'Outro')==='Dedução de Receita').map(mapPagar),
+    ];
+    case 'custoVariavel': return pagar.filter(c=>(c.grupo_dre||'Outro')==='Custo Variável').map(mapPagar);
+    case 'custoFixo': return pagar.filter(c=>(c.grupo_dre||'Outro')==='Custo Fixo').map(mapPagar);
+    case 'despesaOperacional': return pagar.filter(c=>(c.grupo_dre||'Outro')==='Despesa Operacional').map(mapPagar);
+    case 'despesaFinanceira': return pagar.filter(c=>(c.grupo_dre||'Outro')==='Despesa Financeira').map(mapPagar);
+    case 'investimentos': return pagar.filter(c=>(c.grupo_dre||'Outro')==='Investimento').map(mapPagar);
+    default: return [];
+  }
+}
+
 function viewDRE(){
   const receber = contasReceber.filter(c=>c.data_recebimento && c.data_recebimento>=periodoDRE.inicio && c.data_recebimento<=periodoDRE.fim);
   const pagar = contasPagar.filter(c=>c.data_pagamento && c.data_pagamento>=periodoDRE.inicio && c.data_pagamento<=periodoDRE.fim);
@@ -917,12 +1526,52 @@ function viewDRE(){
   const resultadoLiquido = resultadoOperacional - despesaFinanceira;
   const investimentos = somaGrupo(pagar,'Investimento');
 
-  const linha = (label, valor, destaque) => `<tr ${destaque?'style="font-weight:bold; background:#FBF6EA;"':''}>
-    <td>${label}</td><td style="text-align:right;">${moeda(valor)}</td></tr>`;
+  const ICONES_DRE = {
+    receitaBruta: {simbolo:'↑', cor:'var(--ok)'},
+    deducoes: {simbolo:'↓', cor:'var(--danger)'},
+    custoVariavel: {simbolo:'↓', cor:'var(--danger)'},
+    custoFixo: {simbolo:'↓', cor:'var(--danger)'},
+    despesaOperacional: {simbolo:'↓', cor:'var(--danger)'},
+    despesaFinanceira: {simbolo:'↓', cor:'var(--danger)'},
+    investimentos: {simbolo:'★', cor:'var(--gold)'},
+  };
+
+  const linhaDetalhe = (key) => {
+    if(dreDetalheAberto !== key) return '';
+    const itens = lancamentosDoGrupoDRE(key, receber, pagar);
+    const linhasItens = itens.map(i=>`<tr>
+      <td style="padding-left:44px; color:var(--muted); font-size:12.5px;">${i.data||''}</td>
+      <td style="color:var(--muted); font-size:12.5px;" colspan="1">${escapeHtml(i.parte||i.desc||'')}</td>
+      <td style="text-align:right; color:var(--muted); font-size:12.5px;">${moeda(i.valor)}</td>
+    </tr>`).join('');
+    return `<tr><td colspan="2" style="padding:0; background:#FBF8F2;">
+      <table class="dyn" style="margin:0;">
+        ${linhasItens || `<tr><td colspan="3" style="color:var(--muted); font-size:12.5px; padding:8px 44px;">Nenhum lançamento nesse grupo, no período.</td></tr>`}
+      </table>
+    </td></tr>`;
+  };
+
+  const linha = (label, valor, opts={}) => {
+    const { destaque=false, key=null } = opts;
+    const icone = key && ICONES_DRE[key];
+    const clicavel = key ? `onclick="alternarDetalheDRE('${key}')" class="linha-dre-clicavel"` : '';
+    const seta = key ? `<span style="color:var(--muted); font-size:10px; width:12px; display:inline-block;">${dreDetalheAberto===key ? '▾' : '▸'}</span>` : `<span style="width:12px; display:inline-block;"></span>`;
+    const badge = icone ? `<span style="display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:${icone.cor}20; color:${icone.cor}; font-size:12px; font-weight:bold; margin-right:10px;">${icone.simbolo}</span>` : `<span style="width:32px; display:inline-block;"></span>`;
+    const estiloLinha = destaque
+      ? 'font-weight:bold; background:#FBF6EA; border-left:3px solid var(--gold);'
+      : '';
+    return `<tr ${clicavel} style="${estiloLinha}">
+      <td style="padding:${destaque?'12px 10px':'9px 10px'};">${seta}${badge}<span style="${destaque?'font-size:14.5px;':''}">${label}</span></td>
+      <td style="text-align:right; padding:${destaque?'12px 10px':'9px 10px'}; ${destaque?'font-size:14.5px;':''}">${moeda(valor)}</td>
+    </tr>${key ? linhaDetalhe(key) : ''}`;
+  };
 
   return `<div class="secao ativa">
-    <h2>DRE Gerencial</h2>
-    <p class="desc">Baseado no que foi efetivamente pago e recebido (regime de caixa) no período, classificado pelo Grupo (DRE) de cada lançamento.</p>
+    <h2 style="display:flex; align-items:center; gap:10px;">
+      <span style="display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:8px; background:var(--navy); color:var(--gold); font-size:16px;">📊</span>
+      DRE Gerencial
+    </h2>
+    <p class="desc">Baseado no que foi efetivamente pago e recebido (regime de caixa) no período, classificado pelo Grupo (DRE) de cada lançamento. Clique numa linha para ver os lançamentos que a compõem.</p>
 
     <div class="cartao">
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
@@ -941,20 +1590,25 @@ function viewDRE(){
 
     <div class="cartao">
       <table class="dyn">
-        ${linha('Receita Bruta', receitaBruta)}
-        ${linha('(–) Deduções de Receita', -deducoes)}
-        ${linha('= Receita Líquida', receitaLiquida, true)}
-        ${linha('(–) Custos Variáveis', -custoVariavel)}
-        ${linha('= Margem de Contribuição', margemContribuicao, true)}
-        ${linha('(–) Custos Fixos', -custoFixo)}
-        ${linha('(–) Despesas Operacionais', -despesaOperacional)}
-        ${linha('= Resultado Operacional', resultadoOperacional, true)}
-        ${linha('(–) Despesas Financeiras', -despesaFinanceira)}
-        ${linha('= Resultado Líquido do Período', resultadoLiquido, true)}
-        ${linha('Investimentos no período (informativo)', investimentos)}
+        ${linha('Receita Bruta', receitaBruta, {key:'receitaBruta'})}
+        ${linha('(–) Deduções de Receita', -deducoes, {key:'deducoes'})}
+        ${linha('= Receita Líquida', receitaLiquida, {destaque:true})}
+        ${linha('(–) Custos Variáveis', -custoVariavel, {key:'custoVariavel'})}
+        ${linha('= Margem de Contribuição', margemContribuicao, {destaque:true})}
+        ${linha('(–) Custos Fixos', -custoFixo, {key:'custoFixo'})}
+        ${linha('(–) Despesas Operacionais', -despesaOperacional, {key:'despesaOperacional'})}
+        ${linha('= Resultado Operacional', resultadoOperacional, {destaque:true})}
+        ${linha('(–) Despesas Financeiras', -despesaFinanceira, {key:'despesaFinanceira'})}
+        ${linha('= Resultado Líquido do Período', resultadoLiquido, {destaque:true})}
+        ${linha('Investimentos no período (informativo)', investimentos, {key:'investimentos'})}
       </table>
     </div>
   </div>`;
+}
+
+function alternarDetalheDRE(key){
+  dreDetalheAberto = (dreDetalheAberto === key) ? null : key;
+  renderAba('dre');
 }
 
 function atualizarPeriodoDRE(){
