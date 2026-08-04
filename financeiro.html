@@ -1621,7 +1621,78 @@ function viewDRE(){
         ${linha('Investimentos no período (informativo)', investimentos, {key:'investimentos'})}
       </table>
     </div>
+
+    <div class="cartao">
+      <h3>DRE mês a mês (${new Date().getFullYear()})</h3>
+      <p class="ajuda" style="font-size:12px; color:var(--muted); margin-top:0;">Cada coluna é um mês do ano, calculado automaticamente conforme os lançamentos entram.</p>
+      <div style="overflow-x:auto;">
+        ${tabelaDREPorMes()}
+      </div>
+    </div>
   </div>`;
+}
+
+function calcularDREPeriodo(inicio, fim){
+  const receber = contasReceber.filter(c=>c.data_recebimento && c.data_recebimento>=inicio && c.data_recebimento<=fim);
+  const pagar = contasPagar.filter(c=>c.data_pagamento && c.data_pagamento>=inicio && c.data_pagamento<=fim);
+  const somaGrupo = (lista, grupo) => lista.filter(c=>(c.grupo_dre||'Outro')===grupo).reduce((s,c)=>s+Number(c.valor),0);
+
+  const receitaBruta = somaGrupo(receber,'Receita');
+  const deducoes = somaGrupo(receber,'Dedução de Receita') + somaGrupo(pagar,'Dedução de Receita');
+  const receitaLiquida = receitaBruta - deducoes;
+  const custoVariavel = somaGrupo(pagar,'Custo Variável');
+  const margemContribuicao = receitaLiquida - custoVariavel;
+  const custoFixo = somaGrupo(pagar,'Custo Fixo');
+  const despesaOperacional = somaGrupo(pagar,'Despesa Operacional');
+  const resultadoOperacional = margemContribuicao - custoFixo - despesaOperacional;
+  const despesaFinanceira = somaGrupo(pagar,'Despesa Financeira');
+  const resultadoLiquido = resultadoOperacional - despesaFinanceira;
+  const investimentos = somaGrupo(pagar,'Investimento');
+
+  return { receitaBruta, deducoes, receitaLiquida, custoVariavel, margemContribuicao, custoFixo, despesaOperacional, resultadoOperacional, despesaFinanceira, resultadoLiquido, investimentos };
+}
+
+function tabelaDREPorMes(){
+  const ano = new Date().getFullYear();
+  const nomesMes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const meses = nomesMes.map((nome, idx)=>{
+    const inicio = new Date(ano, idx, 1).toISOString().slice(0,10);
+    const fim = new Date(ano, idx+1, 0).toISOString().slice(0,10);
+    return { nome, inicio, dados: calcularDREPeriodo(inicio, fim) };
+  });
+
+  const linhasConfig = [
+    {label:'Receita Bruta', campo:'receitaBruta'},
+    {label:'(–) Deduções de Receita', campo:'deducoes', inverte:true},
+    {label:'= Receita Líquida', campo:'receitaLiquida', destaque:true},
+    {label:'(–) Custos Variáveis', campo:'custoVariavel', inverte:true},
+    {label:'= Margem de Contribuição', campo:'margemContribuicao', destaque:true},
+    {label:'(–) Custos Fixos', campo:'custoFixo', inverte:true},
+    {label:'(–) Despesas Operacionais', campo:'despesaOperacional', inverte:true},
+    {label:'= Resultado Operacional', campo:'resultadoOperacional', destaque:true},
+    {label:'(–) Despesas Financeiras', campo:'despesaFinanceira', inverte:true},
+    {label:'= Resultado Líquido', campo:'resultadoLiquido', destaque:true},
+    {label:'Investimentos', campo:'investimentos'},
+  ];
+
+  const cabecalho = '<th style="text-align:left; position:sticky; left:0; background:#fff;">Linha</th>' +
+    meses.map(m=>`<th style="text-align:right; ${m.inicio>hojeISO()?'opacity:.5;':''}">${m.nome}</th>`).join('');
+
+  const linhasHtml = linhasConfig.map(cfg=>{
+    const celulas = meses.map(m=>{
+      let valor = m.dados[cfg.campo];
+      if(cfg.inverte) valor = -valor;
+      const futuro = m.inicio > hojeISO();
+      return `<td style="text-align:right; ${futuro?'opacity:.5;':''}">${moeda(valor)}</td>`;
+    }).join('');
+    const estiloLinha = cfg.destaque ? 'font-weight:bold; background:#FBF6EA;' : '';
+    return `<tr style="${estiloLinha}"><td style="position:sticky; left:0; background:${cfg.destaque?'#FBF6EA':'#fff'};">${cfg.label}</td>${celulas}</tr>`;
+  }).join('');
+
+  return `<table class="dyn" style="white-space:nowrap;">
+    <thead><tr>${cabecalho}</tr></thead>
+    <tbody>${linhasHtml}</tbody>
+  </table>`;
 }
 
 function alternarDetalheDRE(key){
