@@ -404,11 +404,11 @@ const SECOES = [
     grupo: "Financeiro",
     id: "metas_financeiras",
     titulo: "Metas Financeiras",
-    desc: "Objetivos gerais de faturamento e retorno.",
+    desc: "Objetivos gerais de faturamento e retorno — comparados automaticamente com o realizado no Financeiro.",
     campos: [
-      {tipo:"input", key:"objetivo_faturamento", label:"Objetivo de faturamento"},
-      {tipo:"input", key:"objetivo_retorno", label:"Objetivo de retorno / lucro"},
-      {tipo:"select", key:"prazo", label:"Prazo da meta", opcoes:["Mensal","Trimestral","Anual"]},
+      {tipo:"moeda", key:"objetivo_faturamento", label:"Objetivo de faturamento", ajuda:"Valor em R$"},
+      {tipo:"percentual", key:"objetivo_retorno", label:"Objetivo de margem de retorno"},
+      {tipo:"select", key:"prazo", label:"Prazo da meta", opcoes:["Mensal","Trimestral","Semestral","Anual"]},
       {tipo:"texto", key:"obs_metas", label:"Observações"},
     ]
   },
@@ -445,7 +445,8 @@ const SECOES = [
         colunas:[
           {key:"indicador", label:"Indicador", tipo:"input"},
           {key:"meta", label:"Meta", tipo:"input"},
-          {key:"frequencia", label:"Frequência", tipo:"input"},
+          {key:"sentido", label:"Sentido", tipo:"select", opcoes:["Maior é melhor","Menor é melhor"]},
+          {key:"frequencia", label:"Frequência", tipo:"select", opcoes:["Semanal","Quinzenal","Mensal","Trimestral","Semestral","Anual"]},
           {key:"responsavel", label:"Responsável por acompanhar", tipo:"input"},
         ]},
       {tipo:"tabela", key:"indicadores_area", label:"Indicadores por área",
@@ -453,7 +454,8 @@ const SECOES = [
           {key:"area", label:"Área", tipo:"input"},
           {key:"indicador", label:"Indicador", tipo:"input"},
           {key:"meta", label:"Meta", tipo:"input"},
-          {key:"frequencia", label:"Frequência", tipo:"input"},
+          {key:"sentido", label:"Sentido", tipo:"select", opcoes:["Maior é melhor","Menor é melhor"]},
+          {key:"frequencia", label:"Frequência", tipo:"select", opcoes:["Semanal","Quinzenal","Mensal","Trimestral","Semestral","Anual"]},
         ]},
     ]
   },
@@ -530,6 +532,8 @@ const SECOES = [
 ========================================================= */
 let estado = {};   // { secaoId: {campoKey: valor ou [linhas]} }
 let secaoAtiva = SECOES[0].id;
+let contasPagarFin = [];
+let contasReceberFin = [];
 
 async function iniciarApp(){
   document.getElementById('tela-login').style.display = 'none';
@@ -567,14 +571,20 @@ function montarSidebar(){
 ========================================================= */
 async function carregarDados(){
   document.getElementById('status-save').textContent = 'Carregando...';
-  const { data, error } = await supabaseClient.from('planejamento').select('secao, dados');
-  if(error){
-    console.error(error);
+  const [planRes, pagarRes, receberRes] = await Promise.all([
+    supabaseClient.from('planejamento').select('secao, dados'),
+    supabaseClient.from('contas_pagar').select('valor, data_pagamento, grupo_dre, plano_conta_id, confirmado'),
+    supabaseClient.from('contas_receber').select('valor, data_recebimento, grupo_dre'),
+  ]);
+  if(planRes.error){
+    console.error(planRes.error);
     document.getElementById('status-save').textContent = 'Erro ao carregar';
     return;
   }
   estado = {};
-  (data || []).forEach(row=>{ estado[row.secao] = row.dados || {}; });
+  (planRes.data || []).forEach(row=>{ estado[row.secao] = row.dados || {}; });
+  contasPagarFin = pagarRes.data || [];
+  contasReceberFin = receberRes.data || [];
   document.getElementById('status-save').textContent = 'Dados carregados';
 }
 
@@ -618,15 +628,224 @@ function renderSecao(id){
     }
   });
 
-  html += `
+  let htmlFinal = `
     <div class="barra-acoes">
       <button class="btn" onclick="salvarSecao('${id}')">Salvar</button>
       <span class="msg-secao" id="msg-${id}"></span>
-    </div>
-  </div>`;
+    </div>`;
+
+  if(id === 'metas_financeiras'){
+    htmlFinal += renderAnaliseMetasFinanceiras();
+  }
+  if(id === 'orcamento'){
+    htmlFinal += renderResumoOrcadoRealizado();
+  }
+  if(id === 'metas_indicadores_area'){
+    htmlFinal += renderAcompanhamentoIndicadores();
+  }
+
+  html += htmlFinal + '</div>';
 
   cont.innerHTML = html;
   ativarBindings(id, sec);
+}
+
+function periodoPorPrazo(prazo){
+  const hoje = new Date();
+  let inicio, fim;
+  if(prazo === 'Trimestral'){
+    const ini = Math.floor(hoje.getMonth()/3)*3;
+    inicio = new Date(hoje.getFullYear(), ini, 1);
+    fim = new Date(hoje.getFullYear(), ini+3, 0);
+  } else if(prazo === 'Semestral'){
+    const ini = hoje.getMonth() < 6 ? 0 : 6;
+    inicio = new Date(hoje.getFullYear(), ini, 1);
+    fim = new Date(hoje.getFullYear(), ini+6, 0);
+  } else if(prazo === 'Anual'){
+    inicio = new Date(hoje.getFullYear(), 0, 1);
+    fim = new Date(hoje.getFullYear(), 11, 31);
+  } else { // Mensal (padrão)
+    inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    fim = new Date(hoje.getFullYear(), hoje.getMonth()+1, 0);
+  }
+  const iso = d => d.toISOString().slice(0,10);
+  return { inicio: iso(inicio), fim: iso(fim) };
+}
+
+function moedaBR(v){
+  return (Number(v)||0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+}
+
+let historicoAberto = null;
+
+function parseNumeroSolto(v){
+  return parseFloat(String(v||'0').replace(/[^\d.,-]/g,'').replace(',','.')) || 0;
+}
+
+function renderAcompanhamentoIndicadores(){
+  const dadosSecao = estado['metas_indicadores_area'] || {};
+  const gerais = (dadosSecao.indicadores_gerais || []).map(i=>({...i, escopo:'Geral'}));
+  const porArea = (dadosSecao.indicadores_area || []).map(i=>({...i, escopo: i.area || 'Área'}));
+  const todos = [...gerais, ...porArea];
+  const historico = dadosSecao.historico_indicadores || {};
+
+  if(todos.length === 0){
+    return `<div class="cartao" style="margin-top:22px;">
+      <h3 style="color:var(--bordeaux); margin-top:0;">Acompanhamento de Indicadores</h3>
+      <p style="color:var(--muted); font-size:13px;">Cadastre indicadores nas tabelas acima pra poder acompanhar os resultados aqui.</p>
+    </div>`;
+  }
+
+  const linhas = todos.map(ind=>{
+    if(!ind.id) return ''; // indicador antigo sem id — pede pra recriar
+    const registros = (historico[ind.id] || []).slice().sort((a,b)=>a.data.localeCompare(b.data));
+    const ultimo = registros[registros.length-1];
+    const metaNum = parseNumeroSolto(ind.meta);
+    const menorMelhor = ind.sentido === 'Menor é melhor';
+    let statusHtml = `<span style="color:var(--muted); font-size:12.5px;">Sem resultado registrado</span>`;
+    if(ultimo){
+      const valorNum = parseNumeroSolto(ultimo.valor);
+      const bateu = menorMelhor ? valorNum <= metaNum : valorNum >= metaNum;
+      statusHtml = `<span style="font-weight:bold;">${escapeHtml(ultimo.valor)}</span>
+        <span style="font-size:12px; color:${bateu?'#4C7A4C':'#B23A3A'}; margin-left:6px;">${bateu ? '✓ dentro da meta' : '✗ fora da meta'} (${ultimo.data})</span>`;
+    }
+
+    const historicoAbertoAqui = historicoAberto === ind.id;
+    const listaHistorico = registros.slice().reverse().map(r=>`<div style="font-size:12px; color:var(--muted); padding:2px 0;">${r.data} — ${escapeHtml(r.valor)}</div>`).join('') || `<div style="font-size:12px; color:var(--muted);">Nenhum resultado ainda.</div>`;
+
+    return `<div class="cartao" style="margin-bottom:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
+        <div>
+          <span style="font-size:11px; background:var(--cream-2); padding:2px 8px; border-radius:10px; color:var(--muted); text-transform:uppercase;">${escapeHtml(ind.escopo)}</span>
+          <h4 style="margin:6px 0 2px;">${escapeHtml(ind.indicador||'(sem nome)')}</h4>
+          <p style="margin:0; font-size:12.5px; color:var(--muted);">Meta: ${escapeHtml(ind.meta||'')} · ${escapeHtml(ind.frequencia||'sem frequência definida')}</p>
+        </div>
+        <div style="text-align:right;">${statusHtml}</div>
+      </div>
+      <div class="form-linha" style="margin-top:10px;">
+        <div class="campo"><label>Data</label><input type="date" id="resultado-data-${ind.id}"></div>
+        <div class="campo"><label>Resultado</label><input type="text" id="resultado-valor-${ind.id}" placeholder="Ex: 12%, R$ 5.000, 8..."></div>
+        <div class="campo" style="align-self:end;"><button class="btn btn-sm" onclick="registrarResultadoIndicador('${ind.id}')">Registrar</button></div>
+        <div class="campo" style="align-self:end;"><button class="btn btn-sm btn-ghost" onclick="alternarHistoricoIndicador('${ind.id}')">${historicoAbertoAqui?'Ocultar':'Ver'} histórico (${registros.length})</button></div>
+      </div>
+      ${historicoAbertoAqui ? `<div style="margin-top:8px; padding-top:8px; border-top:1px solid #E7DFCC;">${listaHistorico}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  return `<div style="margin-top:22px;">
+    <h3 style="color:var(--bordeaux);">Acompanhamento de Indicadores</h3>
+    ${linhas}
+  </div>`;
+}
+
+function alternarHistoricoIndicador(id){
+  historicoAberto = (historicoAberto === id) ? null : id;
+  renderSecao('metas_indicadores_area');
+}
+
+async function registrarResultadoIndicador(id){
+  const data = document.getElementById(`resultado-data-${id}`).value || hojeISOPlanejamento();
+  const valor = document.getElementById(`resultado-valor-${id}`).value.trim();
+  if(!valor) return;
+
+  if(!estado['metas_indicadores_area']) estado['metas_indicadores_area'] = {};
+  if(!estado['metas_indicadores_area'].historico_indicadores) estado['metas_indicadores_area'].historico_indicadores = {};
+  if(!estado['metas_indicadores_area'].historico_indicadores[id]) estado['metas_indicadores_area'].historico_indicadores[id] = [];
+  estado['metas_indicadores_area'].historico_indicadores[id].push({ data, valor });
+
+  await salvarSecao('metas_indicadores_area');
+  renderSecao('metas_indicadores_area');
+}
+
+function hojeISOPlanejamento(){ return new Date().toISOString().slice(0,10); }
+
+function renderResumoOrcadoRealizado(){
+  const contasOrcamento = (estado['orcamento'] && estado['orcamento'].contas) ? estado['orcamento'].contas : [];
+  if(contasOrcamento.length === 0){
+    return `<div class="cartao" style="margin-top:22px;">
+      <h3 style="color:var(--bordeaux); margin-top:0;">Prévia — Orçado x Realizado (mês atual)</h3>
+      <p style="color:var(--muted); font-size:13px;">Cadastre pelo menos uma conta no plano de contas acima pra ver essa prévia.</p>
+    </div>`;
+  }
+
+  const hoje = new Date();
+  const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().slice(0,10);
+  const fimMes = new Date(hoje.getFullYear(), hoje.getMonth()+1, 0).toISOString().slice(0,10);
+
+  const pagarMes = contasPagarFin.filter(c=>c.data_pagamento && c.data_pagamento>=inicioMes && c.data_pagamento<=fimMes && c.confirmado);
+
+  const linhas = contasOrcamento.map(conta=>{
+    const orcado = parseFloat(String(conta.orcado||'0').replace(/[^\d.,-]/g,'').replace(',','.')) || 0;
+    const realizado = pagarMes.filter(c=>c.plano_conta_id===conta.id).reduce((s,c)=>s+Number(c.valor),0);
+    const dif = realizado - orcado;
+    const cor = dif===0 ? 'var(--ink)' : (dif>0 ? '#B23A3A' : '#4C7A4C');
+    return `<tr>
+      <td>${escapeHtml(conta.conta||'(sem nome)')}</td>
+      <td>${escapeHtml(conta.tipo||'')}</td>
+      <td style="text-align:right;">${moedaBR(orcado)}</td>
+      <td style="text-align:right;">${moedaBR(realizado)}</td>
+      <td style="text-align:right; color:${cor};">${moedaBR(dif)}</td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="cartao" style="margin-top:22px;">
+    <h3 style="color:var(--bordeaux); margin-top:0;">Prévia — Orçado x Realizado (${hoje.toLocaleDateString('pt-BR',{month:'long', year:'numeric'})})</h3>
+    <div style="overflow-x:auto;">
+      <table class="dyn">
+        <thead><tr><th>Conta</th><th>Grupo</th><th>Orçado (mensal)</th><th>Realizado</th><th>Diferença</th></tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    </div>
+    <p style="font-size:12px; color:var(--muted); margin-top:10px;">Só conta como realizado o que já está marcado como "Confirmado" no Financeiro. Pra análise por trimestre/semestre/ano, veja Orçado x Realizado dentro do Financeiro.</p>
+  </div>`;
+}
+
+function renderAnaliseMetasFinanceiras(){
+  const dados = estado['metas_financeiras'] || {};
+  const metaFaturamento = parseFloat(dados.objetivo_faturamento) || 0;
+  const metaMargem = parseFloat(dados.objetivo_retorno) || 0;
+  const prazo = dados.prazo || 'Mensal';
+  const { inicio, fim } = periodoPorPrazo(prazo);
+
+  const receberPeriodo = contasReceberFin.filter(c=>c.data_recebimento && c.data_recebimento>=inicio && c.data_recebimento<=fim);
+  const pagarPeriodo = contasPagarFin.filter(c=>c.data_pagamento && c.data_pagamento>=inicio && c.data_pagamento<=fim);
+
+  const receitaBruta = receberPeriodo.filter(c=>(c.grupo_dre||'Outro')==='Receita').reduce((s,c)=>s+Number(c.valor),0);
+  const totalPago = pagarPeriodo.reduce((s,c)=>s+Number(c.valor),0);
+  const resultadoLiquido = receitaBruta - totalPago;
+  const margemRealizada = receitaBruta > 0 ? (resultadoLiquido/receitaBruta*100) : 0;
+
+  const difFaturamento = receitaBruta - metaFaturamento;
+  const bateFaturamento = metaFaturamento > 0 && receitaBruta >= metaFaturamento;
+  const difMargem = margemRealizada - metaMargem;
+  const bateMargem = metaMargem > 0 && margemRealizada >= metaMargem;
+
+  const semDados = (contasReceberFin.length===0 && contasPagarFin.length===0);
+
+  return `<div class="cartao" style="margin-top:22px;">
+    <h3 style="color:var(--bordeaux); margin-top:0;">Análise — meta x realizado (${prazo}, ${inicio.split('-').reverse().join('/')} a ${fim.split('-').reverse().join('/')})</h3>
+    ${semDados ? `<p style="color:var(--muted); font-size:13px;">Ainda não há lançamentos no Financeiro para comparar.</p>` : `
+    <div class="grid-2">
+      <div>
+        <p style="font-size:12.5px; color:var(--muted); margin:0 0 4px; text-transform:uppercase;">Faturamento</p>
+        <p style="margin:0 0 2px;">Meta: <b>${moedaBR(metaFaturamento)}</b></p>
+        <p style="margin:0 0 2px;">Realizado: <b>${moedaBR(receitaBruta)}</b></p>
+        <p style="margin:0; color:${bateFaturamento?'#4C7A4C':'#B23A3A'};">
+          ${metaFaturamento>0 ? (bateFaturamento ? `✓ Bateu a meta (+${moedaBR(difFaturamento)})` : `Faltam ${moedaBR(Math.abs(difFaturamento))} pra bater a meta`) : 'Defina uma meta de faturamento acima'}
+        </p>
+      </div>
+      <div>
+        <p style="font-size:12.5px; color:var(--muted); margin:0 0 4px; text-transform:uppercase;">Margem de retorno</p>
+        <p style="margin:0 0 2px;">Meta: <b>${metaMargem.toFixed(1)}%</b></p>
+        <p style="margin:0 0 2px;">Realizada: <b>${margemRealizada.toFixed(1)}%</b></p>
+        <p style="margin:0; color:${bateMargem?'#4C7A4C':'#B23A3A'};">
+          ${metaMargem>0 ? (bateMargem ? `✓ Bateu a meta (+${difMargem.toFixed(1)} p.p.)` : `Faltam ${Math.abs(difMargem).toFixed(1)} p.p. pra bater a meta`) : 'Defina uma meta de margem acima'}
+        </p>
+      </div>
+    </div>
+    <p style="font-size:12px; color:var(--muted); margin-top:14px;">Realizado calculado com base nos lançamentos pagos/recebidos no módulo Financeiro, no período correspondente ao prazo escolhido. Detalhe completo (DRE e Orçado x Realizado) fica no Financeiro.</p>
+    `}
+  </div>`;
 }
 
 function renderCampoSimples(secId, campo){
@@ -644,6 +863,23 @@ function renderCampoSimples(secId, campo){
       <label>${campo.label}</label>
       ${campo.ajuda ? `<div class="ajuda">${campo.ajuda}</div>` : ''}
       <input type="text" data-secao="${secId}" data-campo="${campo.key}" value="${escapeAttr(valorAtual)}" oninput="atualizarCampo(this)">
+    </div>`;
+  }
+  if(campo.tipo === 'moeda'){
+    return `<div class="campo">
+      <label>${campo.label}</label>
+      ${campo.ajuda ? `<div class="ajuda">${campo.ajuda}</div>` : ''}
+      <input type="number" step="0.01" placeholder="0,00" data-secao="${secId}" data-campo="${campo.key}" value="${escapeAttr(valorAtual)}" oninput="atualizarCampo(this)">
+    </div>`;
+  }
+  if(campo.tipo === 'percentual'){
+    return `<div class="campo">
+      <label>${campo.label}</label>
+      ${campo.ajuda ? `<div class="ajuda">${campo.ajuda}</div>` : ''}
+      <div style="position:relative;">
+        <input type="number" step="0.1" placeholder="0" data-secao="${secId}" data-campo="${campo.key}" value="${escapeAttr(valorAtual)}" oninput="atualizarCampo(this)" style="padding-right:28px;">
+        <span style="position:absolute; right:12px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:13px;">%</span>
+      </div>
     </div>`;
   }
   // textarea (default: texto)
